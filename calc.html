@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanos Resource Calculator</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --input-bg: #334155;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.2);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+            --success: #22c55e;
+            --warning: #eab308;
+            --danger: #ef4444;
+            --perf-color: #10b981;
+            
+            /* Component Colors */
+            --otel-color: #a855f7;    
+            --router-color: #f59e0b;  
+            --receive-color: #f97316; 
+            --store-color: #3b82f6;   
+            --compact-color: #ef4444; 
+            --query-color: #14b8a6;   
+            --frontend-color: #ec4899; 
+            --s3-color: #22c55e;      
+            
+            --code-bg: #111827;
+            --code-text: #a5b4fc;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            display: grid;
+            grid-template-columns: 1fr 2.5fr;
+            gap: 30px;
+        }
+
+        /* --- Input Section --- */
+        .inputs-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            height: fit-content;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 20px;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .inputs-panel::-webkit-scrollbar { width: 8px; }
+        .inputs-panel::-webkit-scrollbar-track { background: var(--bg-color); }
+        .inputs-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+            display: block;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px;
+        }
+
+        .input-group { margin-bottom: 20px; }
+        
+        .retention-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .retention-title {
+            grid-column: 1 / -1;
+            font-size: 0.85rem;
+            color: var(--s3-color);
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .helper-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+
+        /* --- Results Section --- */
+        .results-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Summary Header Card */
+        .summary-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid var(--accent);
+            padding: 20px;
+            border-radius: 16px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr); /* 5 Columns for Total Pods */
+            gap: 20px;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.1);
+        }
+
+        .summary-item {
+            text-align: center;
+            border-left: 1px solid rgba(255,255,255,0.1);
+        }
+        .summary-item:last-child { border-left: none; }
+
+        .summary-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .summary-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        /* DPS Hero Card */
+        .dps-card {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .dps-value {
+            font-size: 2rem;
+            font-weight: 800;
+            display: block;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+
+        .dps-label { opacity: 0.9; font-size: 0.9rem; }
+
+        /* Grid for Components */
+        .grid-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .result-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0; 
+            width: 5px;
+            height: 100%;
+        }
+
+        .card-otel::before { background: var(--otel-color); }
+        .card-router::before { background: var(--router-color); }
+        .card-receive::before { background: var(--receive-color); }
+        .card-store::before { background: var(--store-color); }
+        .card-compact::before { background: var(--compact-color); }
+        .card-query::before { background: var(--query-color); }
+        .card-frontend::before { background: var(--frontend-color); }
+        .card-storage::before { background: var(--s3-color); }
+
+        .card-title {
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metric-row {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .card-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-main);
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+        }
+
+        .per-pod {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: normal;
+            display: block;
+            margin-top: 4px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .card-detail {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .formula-text {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.7rem;
+            color: #64748b;
+            margin-top: 4px;
+            display: block;
+            direction: ltr; 
+            text-align: right;
+            border-left: 2px solid #334155;
+            padding-left: 5px;
+        }
+
+        .explanation-box {
+            background: #162032;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+        }
+
+        .explanation-box strong { color: var(--accent); }
+        
+        /* Guide Table Styles */
+        .guide-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.85rem;
+        }
+        .guide-table thead th {
+            text-align: right;
+            padding: 12px 8px;
+            border-bottom: 2px solid var(--accent);
+            color: var(--accent);
+            font-weight: 700;
+            background: rgba(0,0,0,0.2);
+        }
+        .guide-table td {
+            text-align: right;
+            padding: 10px 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            vertical-align: top;
+        }
+        .guide-formula {
+            font-family: 'Consolas', monospace;
+            direction: ltr;
+            text-align: left;
+            color: #a5b4fc;
+            background: rgba(0,0,0,0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            display: inline-block;
+        }
+        
+        .guide-note {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* --- Configuration Generator Section --- */
+        .config-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--success);
+            padding: 25px;
+            border-radius: 16px;
+            margin-top: 20px;
+        }
+
+        .config-title {
+            color: var(--success);
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .config-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .config-tab {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .config-tab.active {
+            background: var(--success);
+            color: #0f172a;
+            border-color: var(--success);
+            font-weight: bold;
+        }
+
+        .config-content {
+            background: #111827;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            color: #a5b4fc;
+            white-space: pre-wrap;
+            direction: ltr;
+            text-align: left;
+            min-height: 150px;
+            position: relative;
+        }
+
+        .copy-config-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .copy-config-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* --- FAQ / Queries Section --- */
+        .faq-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            margin-top: 10px;
+        }
+
+        .code-box {
+            background: var(--code-bg);
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--code-text);
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            direction: ltr; 
+            text-align: left;
+            overflow-x: auto;
+        }
+
+        .code-box code { flex-grow: 1; margin-right: 15px; }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .copy-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* --- Tuning & Safety Section --- */
+        .safety-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--warning);
+            padding: 25px;
+            border-radius: 16px;
+            margin-top: 10px;
+        }
+        
+        .safety-title {
+            color: var(--warning);
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .safety-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .safety-card {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .safety-header {
+            font-weight: bold;
+            color: var(--text-main);
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 5px;
+        }
+
+        .safety-row {
+            margin-bottom: 10px;
+        }
+
+        .safety-label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .safety-val {
+            font-family: 'Consolas', monospace;
+            color: #a5b4fc;
+            font-size: 0.9rem;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 2px;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+            .summary-card { grid-template-columns: 1fr 1fr; }
+            .summary-item { border-left: none; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Left Side: Inputs -->
+    <div class="inputs-panel">
+        <h1>Thanos Sizing Calculator</h1>
+        <span class="subtitle">Resource Planning & Capacity Sizing</span>
+
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="setMode('manual')" id="btnManual">Manual Input</button>
+            <!-- Removing Estimator Wizard mode as requested, keeping logic clean -->
+            <!-- <button class="mode-btn" onclick="setMode('estimator')" id="btnEstimator">New Project (Wizard)</button> -->
+        </div>
+
+        <!-- Manual Inputs Only (Estimator hidden) -->
+        <div id="estimatorInputs" style="display:none;"></div>
+
+        <div class="input-group">
+            <label for="activeSeries">Active Series</label>
+            <input type="number" id="activeSeries" value="1000000" min="0" step="1000">
+            <div class="helper-text" id="seriesHelpText">Unique Time Series (Pre-replication)</div>
+        </div>
+
+        <div class="input-group">
+            <label for="interval">Scrape Interval (Sec)</label>
+            <input type="number" id="interval" value="60" min="1">
+        </div>
+        
+        <div class="input-group">
+            <label for="qps" style="color: var(--query-color);">Query Load (QPS)</label>
+            <input type="number" id="qps" value="10" min="0" step="1" style="border-color: var(--query-color);">
+            <div class="helper-text">Average Queries Per Second</div>
+        </div>
+        
+        <!-- Query Complexity Selector -->
+        <div class="input-group">
+            <label for="queryComplexity" style="color: var(--query-color);">Query Complexity</label>
+            <select id="queryComplexity" style="border-color: var(--query-color);">
+                <option value="52428800">Light (Instant Queries) - 50MB</option>
+                <option value="268435456" selected>Medium (1h Range) - 250MB</option>
+                <option value="1610612736">Heavy (1d-3d Range) - 1.5GB</option>
+                <option value="3221225472">Extreme (30d+ / High Card) - 3GB</option>
+            </select>
+            <div class="helper-text">Impacts Querier & Store RAM significantly.</div>
+        </div>
+        
+        <!-- NEW: Performance/QoS Toggle -->
+        <div class="input-group">
+            <label for="perfMode" style="color: var(--perf-color);">Performance Goal (SLO)</label>
+            <select id="perfMode" onchange="calculate()" style="border-color: var(--perf-color);">
+                <option value="1.0">Cost Optimized (High Utilization ~80%)</option>
+                <option value="1.3" selected>Balanced (Standard Prod ~60%)</option>
+                <option value="2.0">Low Latency (High Performance ~30%)</option>
+            </select>
+            <div class="helper-text">Affects CPU overprovisioning ratio.</div>
+        </div>
+
+        <div class="retention-grid">
+            <span class="retention-title">Retention Policies</span>
+            <div>
+                <label style="font-size:0.8rem">Receiver (Hours)</label>
+                <input type="number" id="retLocalHours" value="6" min="2" style="padding:8px; font-size:0.9rem">
+            </div>
+            <div>
+                <label style="font-size:0.8rem">Raw (Days)</label>
+                <input type="number" id="retRawDays" value="14" min="1" style="padding:8px; font-size:0.9rem">
+            </div>
+            <div>
+                <label style="font-size:0.8rem">5m (Days)</label>
+                <input type="number" id="ret5mDays" value="90" min="0" style="padding:8px; font-size:0.9rem">
+            </div>
+            <div>
+                <label style="font-size:0.8rem">1h (Days)</label>
+                <input type="number" id="ret1hDays" value="365" min="0" style="padding:8px; font-size:0.9rem">
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Side: Results -->
+    <div class="results-panel">
+        
+        <div class="summary-card">
+            <!-- NEW: Total Pods -->
+            <div class="summary-item">
+                <span class="summary-label">Total Pods</span>
+                <span class="summary-value" id="totalPods">0</span>
+                <small style="color:#94a3b8; font-size:0.7rem; display:block;">(Thanos Only)</small>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total vCPU</span>
+                <span class="summary-value" id="totalCpu">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total RAM</span>
+                <span class="summary-value" id="totalRam">0 GB</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">PVC Storage</span>
+                <span class="summary-value" id="totalPvc">0 GB</span>
+                <small style="color:#94a3b8; font-size:0.7rem; display:block;">(Local Disks)</small>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Object Storage</span>
+                <span class="summary-value" id="totalS3">0 GB</span>
+                <small style="color:#94a3b8; font-size:0.7rem; display:block;">(S3 Total)</small>
+            </div>
+        </div>
+
+        <div class="dps-card">
+            <span class="dps-value" id="dpsResult">0</span>
+            <span class="dps-label">Data Points Per Second (DPS)</span>
+        </div>
+
+        <div class="grid-results">
+            
+            <!-- 1. OTel Collector -->
+            <div class="result-card card-otel">
+                <div class="card-title" style="color: var(--otel-color);">1. OTel Collector</div>
+                <div class="metric-row">
+                    <div class="card-value" id="otelCpu">0 vCPU</div>
+                    <div class="card-detail">CPU (Ingestion)</div>
+                    <span class="formula-text">Form: ceil(DPS / 10,000) * Perf</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="otelRam">0 GB</div>
+                    <div class="card-detail">RAM (Buffer)</div>
+                    <span class="formula-text">Form: 512MB + (DPS/10k)GB</span>
+                </div>
+            </div>
+
+            <!-- 2a. Thanos Router -->
+            <div class="result-card card-router">
+                <div class="card-title" style="color: var(--router-color);">2a. Receive Router (Hashring)</div>
+                <div class="metric-row">
+                    <div class="card-value" id="routerReplicas">2 Replicas</div>
+                    <div class="card-detail">Stateless Distributor</div>
+                    <span class="formula-text">Form: ceil(DPS / 30,000)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="routerCpu">2 vCPU</div>
+                    <div class="card-detail">Total vCPU</div>
+                    <span class="formula-text">Form: Replicas * 1 Core * Perf</span>
+                </div>
+            </div>
+
+            <!-- 2b. Thanos Ingestor -->
+            <div class="result-card card-receive">
+                <div class="card-title" style="color: var(--receive-color);">2b. Receive Ingestors (Store)</div>
+                <div class="metric-row">
+                    <div class="card-value" id="ingestorShards">3 Pods</div>
+                    <div class="card-detail">Shards (StatefulSet)</div>
+                    <span class="formula-text">Auto-scale: Max 4M Series/Pod</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="thanosRam">0 GB</div>
+                    <div class="card-detail">Total Cluster RAM</div>
+                    <span class="formula-text">Form: (Series * 4KB) + (QPS Overhead)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="thanosDisk">0 GB</div>
+                    <div class="card-detail">Total PVC (All Shards)</div>
+                    <span class="formula-text">Form: WAL + Local TSDB Blocks</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="thanosCpu">0 vCPU</div>
+                    <div class="card-detail">Total Ingest+Query CPU</div>
+                    <span class="formula-text">Form: Ingestion + Query Load * Perf</span>
+                </div>
+            </div>
+
+            <!-- 3. Thanos Compactor -->
+            <div class="result-card card-compact">
+                <div class="card-title" style="color: var(--compact-color);">3. Thanos Compactor</div>
+                <div class="metric-row">
+                    <div class="card-value" id="compactDisk">0 GB</div>
+                    <div class="card-detail">Scratch Disk PVC</div>
+                    <span class="formula-text">Safety: 3 * (2h Block Size)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="compactRam">0 GB</div>
+                    <div class="card-detail">RAM (Burst)</div>
+                    <span class="formula-text">Form: 2GB Base -> Scale up</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="compactCpu">1 vCPU</div>
+                    <div class="card-detail">CPU</div>
+                    <span class="formula-text">Form: 1 Core (Vertical)</span>
+                </div>
+            </div>
+
+            <!-- 4. Thanos Store -->
+            <div class="result-card card-store">
+                <div class="card-title" style="color: var(--store-color);">4. Thanos Store</div>
+                <div class="metric-row">
+                    <div class="card-value" id="storeRam">0 GB</div>
+                    <div class="card-detail">Total RAM (Index+Buff)</div>
+                    <span class="formula-text">Form: (S3 * 0.2%) + (QPS * Complexity)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="storeCpu">0 vCPU</div>
+                    <div class="card-detail">Total CPU</div>
+                    <span class="formula-text">Form: ((Series/1.5M) + (QPS/15)) * Perf</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="storePvc">0 GB</div>
+                    <div class="card-detail">Total Index Cache (PVC)</div>
+                    <span class="formula-text">Form: S3 Size * 2%</span>
+                </div>
+            </div>
+
+            <!-- 5. Query Frontend -->
+            <div class="result-card card-frontend">
+                <div class="card-title" style="color: var(--frontend-color);">5. Query Frontend</div>
+                <div class="metric-row">
+                    <div class="card-value" id="frontendReplicas">1 Replicas</div>
+                    <div class="card-detail">Stateless / Caching</div>
+                    <span class="formula-text">Form: Base 1 + (QPS / 50)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="frontendCpuVal">1 vCPU</div>
+                    <div class="card-detail">Total vCPU</div>
+                    <span class="formula-text">Form: (Replicas * 1 Core) * Perf</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="frontendRamVal">2 GB</div>
+                    <div class="card-detail">Total RAM (Cache)</div>
+                    <span class="formula-text">Form: Replicas * 2GB</span>
+                </div>
+            </div>
+
+            <!-- 6. Thanos Querier -->
+            <div class="result-card card-query">
+                <div class="card-title" style="color: var(--query-color);">6. Thanos Querier</div>
+                <div class="metric-row">
+                    <div class="card-value" id="querierReplicas">1 Replicas</div>
+                    <div class="card-detail">Stateless Engine</div>
+                    <span class="formula-text">Form: Base 1 + (QPS / 20)</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="querierCpuVal">2 vCPU</div>
+                    <div class="card-detail">Total vCPU</div>
+                    <span class="formula-text">Form: (Replicas * 2 Core) * Perf</span>
+                </div>
+                <div class="metric-row">
+                    <div class="card-value" id="querierRamVal">4 GB</div>
+                    <div class="card-detail">Total RAM (Fan-out)</div>
+                    <span class="formula-text">Form: Replicas * Complexity</span>
+                </div>
+            </div>
+
+            <!-- 7. Storage -->
+            <div class="result-card card-storage">
+                <div class="card-title" style="color: var(--storage-color);">7. Object Storage (S3)</div>
+                <div class="metric-row">
+                    <div class="card-value" id="s3Storage">0 GB</div>
+                    <div class="card-detail">Total Capacity (S3)</div>
+                    <span class="formula-text">Form: Raw + 5m (x5) + 1h (x5)</span>
+                </div>
+                <div class="metric-row">
+                    <div style="font-size:0.75rem; color:#94a3b8; display:flex; justify-content:space-between;">
+                        <span>Raw: <span id="valRaw" style="color:white"></span></span>
+                        <span>5m: <span id="val5m" style="color:white"></span></span>
+                        <span>1h: <span id="val1h" style="color:white"></span></span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- NEW: Safety & Tuning Panel -->
+        <div class="safety-panel">
+            <div class="safety-title">🛡️ Production Tuning & Safety Flags</div>
+            <div style="margin-bottom:15px; font-size:0.85rem; color:#cbd5e1;">
+                Recommended <code>GOMEMLIMIT</code> is 90% of container memory limit.
+                Concurrency flags are dynamic based on load.
+            </div>
+            
+            <div class="safety-grid">
+                
+                <!-- Query Safety -->
+                <div class="safety-card">
+                    <div class="safety-header" style="color:var(--query-color);">Thanos Query</div>
+                    <div class="safety-row">
+                        <span class="safety-label">GOMEMLIMIT (Recommended)</span>
+                        <span class="safety-val" id="safeQueryMem">90% of Limit (0.9)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--query.max-concurrent</span>
+                        <span class="safety-val" id="safeQueryConcurrent">20</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--query.timeout</span>
+                        <span class="safety-val">2m</span>
+                    </div>
+                </div>
+
+                <!-- Store Safety -->
+                <div class="safety-card">
+                    <div class="safety-header" style="color:var(--store-color);">Thanos Store</div>
+                    <div class="safety-row">
+                        <span class="safety-label">GOMEMLIMIT (Recommended)</span>
+                        <span class="safety-val" id="safeStoreMem">90% of Limit (0.9)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--store.grpc.series-max-concurrency</span>
+                        <span class="safety-val" id="safeStoreConcurrency">20</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--store.grpc.series-sample-limit</span>
+                        <span class="safety-val" id="safeStoreSampleLimit">5e6</span>
+                    </div>
+                </div>
+
+                <!-- Receiver Safety -->
+                <div class="safety-card">
+                    <div class="safety-header" style="color:var(--receive-color);">Thanos Receiver</div>
+                    <div class="safety-row">
+                        <span class="safety-label">GOMEMLIMIT (Recommended)</span>
+                        <span class="safety-val" id="safeReceiveMem">90% of Limit (0.9)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--receive.remote-write.server-max-concurrency</span>
+                        <span class="safety-val" id="safeReceiveConcurrency">50</span>
+                    </div>
+                    <div class="safety-row" style="border-top:1px solid #475569; padding-top:8px;">
+                        <span class="safety-label" style="color:var(--store-color)">Store API Limit (Protection)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--store.limits.request-samples</span>
+                        <span class="safety-val" id="safeReceiveRequestLimit">2.0e7</span>
+                    </div>
+                    <!-- Note on Tenant Limits -->
+                    <div class="safety-row" style="margin-top:10px; opacity:0.7;">
+                        <span class="safety-label" style="text-transform:none;">* Note: Set series/sample limits in tenant config file (hashring).</span>
+                    </div>
+                </div>
+
+                <!-- Compactor Safety -->
+                <div class="safety-card">
+                    <div class="safety-header" style="color:var(--compact-color);">Thanos Compactor</div>
+                    <div class="safety-row">
+                        <span class="safety-label">GOMEMLIMIT (Recommended)</span>
+                        <span class="safety-val" id="safeCompactMem">90% of Limit (0.9)</span>
+                    </div>
+                    <div class="safety-row">
+                        <span class="safety-label">--compact.concurrency</span>
+                        <span class="safety-val">1</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="explanation-box">
+            <span class="explanation-title">📊 Complete Formula Reference Guide</span>
+            <div id="explanationText">
+                <div style="margin-bottom:10px; color:#cbd5e1;">
+                    This table summarizes all variables, constants, and formulas used for sizing.
+                    <br><strong>Perf Factor:</strong> Chosen at the top (1.0 = Cost, 2.0 = Low Latency).
+                </div>
+                <table class="guide-table">
+                    <thead>
+                        <tr>
+                            <th>Component / Metric</th>
+                            <th>Formula / Logic</th>
+                            <th>Explanation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>DPS (Write Rate)</strong></td>
+                            <td class="guide-formula">Series / Interval</td>
+                            <td class="guide-note">Actual Data Points Per Second.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Receive Shards</strong></td>
+                            <td class="guide-formula">MAX( Series/4M , CPU_Needed/4 )</td>
+                            <td class="guide-note">Pods needed to stay under 4M series (RAM) or 4 Cores load.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Receive RAM</strong></td>
+                            <td class="guide-formula">(Series * 4KB) + (QPS * Complexity)</td>
+                            <td class="guide-note">
+                                4KB index per series + query buffer.
+                                <br><strong>Note:</strong> Complexity capped at 300MB for Receiver due to short retention.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Querier RAM</strong></td>
+                            <td class="guide-formula">Replicas * ComplexityFactor</td>
+                            <td class="guide-note">Memory for fan-out and merging of heavy queries.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Receive CPU</strong></td>
+                            <td class="guide-formula">(DPS / 15,000) + (QPS / 5)</td>
+                            <td class="guide-note">
+                                1. <strong>Ingestion:</strong> 1 Core handles ~15k DPS efficiently.<br>
+                                2. <strong>Query:</strong> Decompression of hot data is CPU intensive.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Receive Disk (PVC)</strong></td>
+                            <td class="guide-formula">WAL + (DPS * Time * 1.5B)</td>
+                            <td class="guide-note">
+                                WAL + Compressed local blocks based on local retention.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Store Gateway RAM</strong></td>
+                            <td class="guide-formula">(S3 Bytes * 0.2%) + 1GB + (QPS * Complexity)</td>
+                            <td class="guide-note">RAM for Index Header Cache + Query processing buffer.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Safety: Store API Limit</strong></td>
+                            <td class="guide-formula">Max(20M, ActiveSeries * 20)</td>
+                            <td class="guide-note">Protection against massive scans. Scaled by cluster size.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- NEW: Generated Configuration Panel -->
+        <div class="config-panel">
+            <div class="config-title">📝 Generated Configuration (YAML)</div>
+            <div class="config-tabs">
+                <div class="config-tab active" data-key="receive" onclick="activateTab(this)">Receiver</div>
+                <div class="config-tab" data-key="store" onclick="activateTab(this)">Store Gateway</div>
+                <div class="config-tab" data-key="query" onclick="activateTab(this)">Querier</div>
+                <div class="config-tab" data-key="compactor" onclick="activateTab(this)">Compactor</div>
+                <div class="config-tab" data-key="frontend" onclick="activateTab(this)">Frontend</div>
+            </div>
+            <div class="config-content">
+                <button class="copy-config-btn" onclick="copyConfig()">Copy</button>
+                <div id="configOutput"></div>
+            </div>
+        </div>
+
+        <div class="faq-panel" id="queryPanel">
+            <div class="faq-title">🔎 Current State Checks (PromQL)</div>
+            <div class="query-item">
+                <span class="query-label">Active Series (Sum of all Ingestors):</span>
+                <div class="code-box">
+                    <code>sum(thanos_receive_tenant_active_series)</code>
+                    <button class="copy-btn" onclick="copyToClipboard('sum(thanos_receive_tenant_active_series)')">Copy</button>
+                </div>
+            </div>
+            <div class="query-item">
+                <span class="query-label">Ingestion Rate (Total Router Throughput):</span>
+                <div class="code-box">
+                    <code>sum(rate(thanos_receive_received_samples_total[1m]))</code>
+                    <button class="copy-btn" onclick="copyToClipboard('sum(rate(thanos_receive_received_samples_total[1m]))')">Copy</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let currentMode = 'manual';
+    let currentConfigData = {};
+
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    function formatMib(bytes) {
+        if (bytes === 0) return '0MiB';
+        return Math.floor(bytes / (1024 * 1024)) + "MiB";
+    }
+
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    function copyToClipboard(text) {
+        const tempInput = document.createElement("input");
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempInput);
+        alert("Copied to clipboard!");
+    }
+    
+    function copyConfig() {
+        const text = document.getElementById('configOutput').innerText;
+        const tempInput = document.createElement("textarea");
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempInput);
+        alert("Configuration copied!");
+    }
+
+    // New decoupled functions for UI management
+    function activateTab(el) {
+        document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        refreshConfigView();
+    }
+
+    function refreshConfigView() {
+        const activeTab = document.querySelector('.config-tab.active');
+        if(!activeTab) return;
+        const key = activeTab.getAttribute('data-key');
+        document.getElementById('configOutput').innerText = currentConfigData[key] || "No config available.";
+    }
+
+    function setMode(mode) {
+        currentMode = mode;
+        const btnManual = document.getElementById('btnManual');
+        // btnEstimator logic removed for simplified version, but keeping function structure
+        const estimatorSection = document.getElementById('estimatorInputs');
+        
+        if (mode === 'manual') {
+            document.getElementById('btnManual').classList.add('active');
+            // document.getElementById('btnEstimator').classList.remove('active');
+        }
+    }
+
+    function calculate() {
+        try {
+            const activeSeries = parseInt(document.getElementById('activeSeries').value) || 0;
+            const interval = parseInt(document.getElementById('interval').value) || 1;
+            const replication = 1; 
+            const qps = parseInt(document.getElementById('qps').value) || 0;
+            
+            const perfFactor = parseFloat(document.getElementById('perfMode').value) || 1.3;
+            const complexityBytes = parseInt(document.getElementById('queryComplexity').value) || 268435456; 
+
+            const retLocalHours = parseInt(document.getElementById('retLocalHours').value) || 6;
+            const retRawDays = parseInt(document.getElementById('retRawDays').value) || 15;
+            const ret5mDays = parseInt(document.getElementById('ret5mDays').value) || 0;
+            const ret1hDays = parseInt(document.getElementById('ret1hDays').value) || 0;
+
+            const dps = activeSeries / interval;
+            document.getElementById('dpsResult').innerText = formatNumber(Math.floor(dps));
+
+            // --- COMPONENTS ---
+
+            const otelCpu = Math.ceil((dps / 10000) * perfFactor); 
+            const otelRamBytes = (512 * 1024 * 1024) + ((dps / 10000) * 1024 * 1024 * 1024);
+            document.getElementById('otelCpu').innerText = (otelCpu < 1 ? 1 : otelCpu) + " vCPU";
+            document.getElementById('otelRam').innerText = formatBytes(otelRamBytes);
+
+            let routerReplicas = Math.ceil(dps / 30000); 
+            if (routerReplicas < 2) routerReplicas = 2; 
+            const routerCpu = Math.ceil((routerReplicas * 1) * perfFactor);
+            const routerRamBytes = routerReplicas * 1 * 1024 * 1024 * 1024;
+            
+            document.getElementById('routerReplicas').innerText = routerReplicas + " Replicas";
+            document.getElementById('routerCpu').innerHTML = `${routerCpu} vCPU <span class="per-pod">(${Math.round((routerCpu/routerReplicas)*10)/10} / Pod)</span>`;
+
+            const totalReplicatedSeries = activeSeries * replication;
+            const maxSeriesPerPod = 4000000;
+            let ingestorShards = Math.ceil(totalReplicatedSeries / maxSeriesPerPod);
+            if (ingestorShards < replication) ingestorShards = replication;
+            
+            const maxReceiverQueryMem = 300 * 1024 * 1024; 
+            const effectiveReceiverComplexity = Math.min(complexityBytes, maxReceiverQueryMem);
+            const receiveQueryRamOverhead = qps * effectiveReceiverComplexity;
+            const thanosRamBytes = (totalReplicatedSeries * 4096) + receiveQueryRamOverhead;
+            const ingestorRamPerPod = thanosRamBytes / ingestorShards;
+            
+            const walBytes = dps * 7200 * 3 * replication * 1.5; 
+            let localTsdbBytes = 0;
+            if (retLocalHours > 2) {
+                const retentionSeconds = (retLocalHours - 2) * 3600;
+                localTsdbBytes = dps * retentionSeconds * 1.5 * replication;
+            }
+            const totalReceiverDisk = walBytes + localTsdbBytes;
+            
+            const receiveIngestCpu = (dps * replication) / 15000;
+            const receiveQueryCpu = qps / 5; 
+            const receiveCpu = Math.ceil((receiveIngestCpu + receiveQueryCpu) * perfFactor);
+            
+            document.getElementById('ingestorShards').innerText = ingestorShards + " Pods";
+            document.getElementById('thanosRam').innerHTML = `${formatBytes(thanosRamBytes)} <span class="per-pod">(${formatBytes(ingestorRamPerPod)} / Pod)</span>`;
+            document.getElementById('thanosDisk').innerHTML = `${formatBytes(totalReceiverDisk)} <span class="per-pod">(${formatBytes(totalReceiverDisk/ingestorShards)} / Pod)</span>`;
+            document.getElementById('thanosCpu').innerHTML = `${receiveCpu} vCPU <span class="per-pod">(${(receiveCpu/ingestorShards).toFixed(1)} / Pod)</span>`;
+            
+            const safeReceiveRequestLimit = Math.max(20000000, activeSeries * 20);
+            document.getElementById('safeReceiveRequestLimit').innerText = safeReceiveRequestLimit.toExponential(1);
+
+            const safeReceiveConcurrency = Math.max(50, Math.ceil((activeSeries / interval) / 250));
+            document.getElementById('safeReceiveConcurrency').innerText = safeReceiveConcurrency;
+            
+            // Adjust series/sample limits based on active series size - for config only/info
+            const safeSeriesLimit = Math.max(50000, Math.min(500000, Math.ceil(activeSeries / 50)));
+
+            const s3RawBytes = dps * 86400 * retRawDays * 1.5;
+            const s35mBytes = (dps / 300) * 86400 * ret5mDays * 5 * 2;
+            const s31hBytes = (dps / 3600) * 86400 * ret1hDays * 5 * 2;
+            const totalS3Bytes = s3RawBytes + s35mBytes + s31hBytes;
+
+            document.getElementById('s3Storage').innerText = formatBytes(totalS3Bytes);
+            document.getElementById('valRaw').innerText = formatBytes(s3RawBytes);
+            document.getElementById('val5m').innerText = formatBytes(s35mBytes);
+            document.getElementById('val1h').innerText = formatBytes(s31hBytes);
+
+            const singleReplicaWal = dps * 7200 * 3; 
+            const compactorScratchBytes = singleReplicaWal * 3; 
+            let compactorRamGB = 2;
+            if(activeSeries > 1000000) compactorRamGB = 8;
+            if(activeSeries > 5000000) compactorRamGB = 16;
+            const compactorRamBytes = compactorRamGB * 1024 * 1024 * 1024;
+            const compactorCpu = 1; 
+            const compactorReplicas = 1; 
+            
+            document.getElementById('compactDisk').innerText = formatBytes(compactorScratchBytes);
+            document.getElementById('compactRam').innerText = compactorRamGB + " GB";
+            document.getElementById('compactCpu').innerText = compactorCpu + " vCPU";
+            
+            const storeCacheBytes = (totalS3Bytes * 0.002) + (1 * 1024*1024*1024); 
+            const storeQueryOverhead = qps * complexityBytes; 
+            const storeRamTotal = storeCacheBytes + storeQueryOverhead;
+
+            let baseStoreCpu = (activeSeries / 1500000) + (qps / 15); 
+            let storeCpu = Math.ceil(baseStoreCpu * perfFactor);
+            if (storeCpu < 1) storeCpu = 1;
+            let storeReplicas = Math.ceil(storeCpu / 2); 
+            if (storeReplicas < 1) storeReplicas = 1;
+            
+            if (storeCpu < storeReplicas) storeCpu = storeReplicas; 
+
+            const storeRamPerPod = storeRamTotal / storeReplicas;
+            const storePvcPerReplica = totalS3Bytes * 0.02;
+            const storePvcTotal = storePvcPerReplica * storeReplicas;
+
+            document.getElementById('storeRam').innerHTML = `${formatBytes(storeRamTotal)} <span class="per-pod">(${formatBytes(storeRamPerPod)} / Pod)</span>`;
+            document.getElementById('storeCpu').innerHTML = `${storeCpu} vCPU <span class="per-pod">(${(storeCpu/storeReplicas).toFixed(1)} / Pod)</span>`;
+            document.getElementById('storePvc').innerHTML = `${formatBytes(storePvcTotal)} <span class="per-pod">(${formatBytes(storePvcPerReplica)} / Pod)</span>`;
+
+            let frontendReplicas = 1 + Math.floor(qps / 50);
+            const frontendCpu = Math.ceil((frontendReplicas * 1) * perfFactor); 
+            const frontendRamBytes = frontendReplicas * 2 * 1024 * 1024 * 1024; 
+            document.getElementById('frontendReplicas').innerText = frontendReplicas + " Replicas";
+            document.getElementById('frontendCpuVal').innerHTML = `${frontendCpu} vCPU <span class="per-pod">(${Math.round((frontendCpu/frontendReplicas)*10)/10} / Pod)</span>`;
+            document.getElementById('frontendRamVal').innerHTML = `${formatBytes(frontendRamBytes)} <span class="per-pod">(2GB / Pod)</span>`;
+
+            let querierReplicas = 1 + Math.floor(qps / 20);
+            const querierCpu = Math.ceil((querierReplicas * 2) * perfFactor); 
+            const querierRamBytes = (1 * 1024*1024*1024) + (qps * complexityBytes);
+            const querierRamPerPod = querierRamBytes / querierReplicas;
+
+            document.getElementById('querierReplicas').innerText = querierReplicas + " Replicas";
+            document.getElementById('querierCpuVal').innerHTML = `${querierCpu} vCPU <span class="per-pod">(${Math.round((querierCpu/querierReplicas)*10)/10} / Pod)</span>`;
+            document.getElementById('querierRamVal').innerHTML = `${formatBytes(querierRamBytes)} <span class="per-pod">(${formatBytes(querierRamPerPod)} / Pod)</span>`;
+
+            const safeQueryConcurrent = Math.max(20, Math.ceil(qps * 2));
+            document.getElementById('safeQueryConcurrent').innerText = safeQueryConcurrent;
+            const safeStoreConcurrency = Math.max(20, Math.ceil(qps * 2));
+            document.getElementById('safeStoreConcurrency').innerText = safeStoreConcurrency;
+            const safeStoreSampleLimit = Math.max(5000000, Math.ceil(activeSeries * 1.5));
+            document.getElementById('safeStoreSampleLimit').innerText = safeStoreSampleLimit.toExponential(1);
+
+            const totalThanosPods = routerReplicas + ingestorShards + 1 + storeReplicas + frontendReplicas + querierReplicas;
+            const finalTotalCpu = otelCpu + routerCpu + receiveCpu + compactorCpu + storeCpu + frontendCpu + querierCpu;
+            const totalRam = otelRamBytes + routerRamBytes + thanosRamBytes + storeRamTotal + frontendRamBytes + querierRamBytes + compactorRamBytes;
+            const totalPvc = totalReceiverDisk + compactorScratchBytes + storePvcTotal;
+
+            document.getElementById('totalPods').innerText = totalThanosPods;
+            document.getElementById('totalCpu').innerText = finalTotalCpu + " vCPU";
+            document.getElementById('totalRam').innerText = formatBytes(totalRam);
+            document.getElementById('totalPvc').innerText = formatBytes(totalPvc);
+            document.getElementById('totalS3').innerText = formatBytes(totalS3Bytes);
+
+            const perfText = perfFactor === 1.0 ? "Cost Optimized" : (perfFactor === 2.0 ? "Low Latency" : "Balanced");
+            const explanation = `
+                <div style="margin-bottom:8px; color:var(--perf-color);"><strong>🚀 Performance Mode: ${perfText}</strong> <br>
+                Added a ${perfFactor}x CPU factor to keep utilization low and improve latency.</div>
+                
+                <div style="margin-bottom:8px">1. <strong>Query Complexity Factor:</strong> <br>
+                Added complexity multiplier. Heavy queries (days range) double memory requirements for Querier and Store Gateway to prevent OOM.</div>
+
+                <div style="margin-bottom:8px">2. <strong>Receiver Storage:</strong> <br>
+                All data is stored on ${ingestorShards} Ingestor Pods. Total Volume: <strong>${formatBytes(totalReceiverDisk)}</strong>.</div>
+            `;
+            document.getElementById('explanationText').innerHTML = explanation;
+            
+            // Generate Config Data
+            currentConfigData['receive'] = `# Thanos Receiver Ingestor (${ingestorShards} Replicas)
+# -----------------------------------------------------
+# Note: request limits (series/samples) should be set in
+# a limits configuration file (e.g. --receive.tenant-limit-config-file)
+# or via --receive.default-tenant-limit.* flags if available.
+
+args:
+  - receive
+  - --tsdb.retention.time=${retLocalHours}h
+  - --receive.remote-write.server-max-concurrency=${safeReceiveConcurrency}
+  - --store.limits.request-samples=${safeReceiveRequestLimit.toExponential(1)}
+  - --objstore.config-file=/etc/thanos/bucket.yml
+  - --auto-gomemlimit.ratio=0.9
+
+env:
+  - name: GOGC
+    value: "100"`;
+
+            currentConfigData['store'] = `# Thanos Store Gateway (${storeReplicas} Replicas)
+# -----------------------------------------------------
+args:
+  - store
+  - --index-cache-size=${formatMib(storeRamPerPod * 0.5)}  # ~50% of Pod RAM for Cache
+  - --chunk-pool-size=${formatMib(storeRamPerPod * 0.3)}   # ~30% for Chunk Pool
+  - --store.grpc.series-max-concurrency=${safeStoreConcurrency}
+  - --store.grpc.series-sample-limit=${safeStoreSampleLimit.toExponential(1)}
+  - --objstore.config-file=/etc/thanos/bucket.yml
+  - --auto-gomemlimit.ratio=0.9
+
+env:
+  # No GOMEMLIMIT env needed if using auto-gomemlimit flag`;
+
+            currentConfigData['query'] = `# Thanos Querier (${querierReplicas} Replicas)
+# -----------------------------------------------------
+args:
+  - query
+  - --query.max-concurrent=${safeQueryConcurrent}
+  - --query.timeout=2m
+  - --query.replica-label=replica
+  - --auto-gomemlimit.ratio=0.9
+  
+env:
+  # No GOMEMLIMIT env needed if using auto-gomemlimit flag`;
+
+            currentConfigData['compactor'] = `# Thanos Compactor (Singleton)
+# -----------------------------------------------------
+args:
+  - compact
+  - --compact.concurrency=1
+  - --retention.resolution-raw=${retRawDays}d
+  - --retention.resolution-5m=${ret5mDays}d
+  - --retention.resolution-1h=${ret1hDays}d
+  - --objstore.config-file=/etc/thanos/bucket.yml
+  - --auto-gomemlimit.ratio=0.9
+
+env:
+  # No GOMEMLIMIT env needed if using auto-gomemlimit flag`;
+
+            currentConfigData['frontend'] = `# Thanos Query Frontend (${frontendReplicas} Replicas)
+# -----------------------------------------------------
+args:
+  - query-frontend
+  - --query-range.split-interval=24h
+  - --query-range.align-range-with-step=true
+  - --query-range.max-retries-per-request=5
+  - --query-range.response-cache-config-file=/etc/thanos/cache.yml
+  - --auto-gomemlimit.ratio=0.9
+
+env:
+  # No GOMEMLIMIT env needed if using auto-gomemlimit flag`;
+
+            refreshConfigView();
+        } catch (e) {
+            console.error("Calculation Error:", e);
+        }
+    }
+
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        if (!input.id.startsWith('est')) {
+            input.addEventListener('input', () => {
+                if (currentMode === 'manual') calculate();
+                else if (input.id !== 'activeSeries') calculate(); 
+            });
+        }
+    });
+
+    // Run initial calc immediately
+    calculate();
+</script>
+
+</body>
+</html>
