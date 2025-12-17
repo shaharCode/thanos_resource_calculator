@@ -1,3 +1,7 @@
+// Vercel Web Analytics integration
+import { inject } from "@vercel/analytics";
+inject();
+
 let currentMode = 'manual';
 let currentConfigData = {};
 
