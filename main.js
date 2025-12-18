@@ -185,13 +185,24 @@ function calculate() {
         if (storeCpu < storeReplicas) storeCpu = storeReplicas;
 
         const storeRamPerPod = storeRamTotal / storeReplicas;
-        const storePvcPerReplica = totalS3Bytes * 0.02;
+        // Bumped to 10% based on production feedback (Cache + Chunks + Metadata)
+        const storePvcPerReplica = totalS3Bytes * 0.10;
         const storePvcTotal = storePvcPerReplica * storeReplicas;
 
         document.getElementById('storeReplicas').innerText = storeReplicas + " Replicas";
         document.getElementById('storeRam').innerHTML = `${formatBytes(storeRamTotal)} <span class="per-pod">(${formatBytes(storeRamPerPod)} / Pod)</span>`;
         document.getElementById('storeCpu').innerHTML = `${storeCpu} vCPU <span class="per-pod">(${(storeCpu / storeReplicas).toFixed(1)} / Pod)</span>`;
         document.getElementById('storePvc').innerHTML = `${formatBytes(storePvcTotal)} <span class="per-pod">(${formatBytes(storePvcPerReplica)} / Pod)</span>`;
+
+        // Check for Time Partitioning Recommendation (>32GB Total RAM)
+        const tipEl = document.getElementById('storePartitionTip');
+        if (tipEl) {
+            if (storeRamTotal > 32 * 1024 * 1024 * 1024) {
+                tipEl.style.display = 'block';
+            } else {
+                tipEl.style.display = 'none';
+            }
+        }
 
         let frontendReplicas = 1 + Math.floor(qps / 50);
         const frontendCpu = Math.ceil((frontendReplicas * 1) * perfFactor);

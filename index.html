@@ -224,7 +224,21 @@
                     <div class="metric-row">
                         <div class="card-value" id="storePvc">0 GB</div>
                         <div class="card-detail">Total Index Cache (PVC)</div>
-                        <span class="formula-text">Form: S3 Size * 2%</span>
+                        <span class="formula-text">Form: S3 Size * 10% (Cache)</span>
+                    </div>
+
+                    <!-- NEW: Partitioning Recommendation -->
+                    <div id="storePartitionTip" class="store-partition-tip"
+                        style="display:none; margin-top:15px; padding:12px; background:rgba(234, 179, 8, 0.1); border:1px solid rgba(234, 179, 8, 0.3); border-radius:6px;">
+                        <div style="color:#fbbf24; font-weight:bold; font-size:0.9rem; margin-bottom:5px;">⚠️
+                            Recommendation: Split Store Gateway</div>
+                        <div style="font-size:0.85rem; color:#cbd5e1;">
+                            Total RAM usage (>32GB) is high. consider <strong>Time Partitioning</strong>:
+                            <ul style="margin:5px 0 0 15px; padding:0;">
+                                <li>1. <strong>Recent Store:</strong> Helper for last 3 days (High Performance).</li>
+                                <li>2. <strong>Historic Store:</strong> For older data (Cost Efficient).</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
