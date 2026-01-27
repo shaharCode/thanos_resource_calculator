@@ -1,33 +1,31 @@
-Thanos Resource Calculator
+# Thanos Resource Calculator
 
-A small, client-side calculator built with vanilla HTML, with CSS and JavaScript embedded directly inside the HTML file. It estimates resources (replace with a short description of what the calculator does).
+A resource sizing calculator for Thanos, now powered by a **Python (FastAPI)** backend with a modern web frontend.
 
-Built with
+## Overview
+This tool helps you estimate the required CPU, RAM, and Storage for a Thanos deployment based on your metrics ingestion rate (DPS), query load (QPS), and retention policies.
 
-HTML (single file containing inline CSS and JavaScript)
-No build tools or external dependencies
-Demo / Preview
+## Features
+- **FastAPI Backend**: Logic handled in Python for accuracy and extensibility.
+- **Interactive UI**: User-friendly web interface.
+- **Config Generation**: Automatically generates YAML config snippets for Thanos components.
 
-Open the HTML file in a browser (double-click the file or use your browser's File → Open).
-No server required.
-Installation / Running Locally
+## Installation & Running
 
-Clone the repo: git clone https://github.com/ron9295/thanos_resource_calculator.git
-Change directory: cd thanos_resource_calculator
-Open the HTML file (e.g., index.html) in your browser.
-Usage
+1. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-The UI and logic are contained in the HTML file. Describe the inputs the calculator expects (e.g., number of nodes, replicas, memory), how to trigger the calculation (button name), and provide an example input + expected output.
-Project structure
+2. **Run the Server**:
+   ```bash
+   uvicorn main:app --reload
+   ```
 
-index.html — single-file app with HTML, CSS, and JavaScript inline
-assets/ — optional images or other static files (if present)
-Development
+3. **Open Access**:
+   Open your browser to [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-Edit the HTML file directly. Save and refresh the browser to see changes.
-No build or server steps required.
-Contributing Contributions welcome — open an issue or submit a pull request with a clear description of changes.
-
-License Add a license (e.g., MIT). Replace this line with the actual license text or link to LICENSE.
-
-Contact Maintainer: @ron9295
+## Project Structure
+- `main.py`: FastAPI server and calculation logic.
+- `models.py`: Pydantic data models.
+- `index.html` / `style.css` / `main.js`: Frontend assets.
