@@ -94,77 +94,67 @@ async function calculate() {
         }
 
         const data = await response.json();
-        const m = data.metrics;
-        currentConfigData = data.configs; // Update configs
+        const r = data.resources;
+
+        // Display DPS
+        document.getElementById('dpsResult').innerText = formatNumber(r.dps);
+
+        // Calculate totals
+        const totalPods = r.otel.replicas + r.router.replicas + r.ingestor.replicas + r.compactor.replicas + r.store.replicas + r.frontend.replicas + r.querier.replicas;
+        const totalCpu = r.otel.cpu + r.router.cpu + r.ingestor.cpu + r.compactor.cpu + r.store.cpu + r.frontend.cpu + r.querier.cpu;
+
+        // Update summary
+        document.getElementById('totalPods').innerText = totalPods;
+        document.getElementById('totalCpu').innerText = totalCpu + " vCPU";
+        document.getElementById('totalRam').innerText = r.ingestor.ram; // Placeholder - could aggregate if needed
+        document.getElementById('totalPvc').innerText = r.ingestor.pvc; // Placeholder
+        document.getElementById('totalS3').innerText = r.S3Size;
 
         // Update UI
-        document.getElementById('dpsResult').innerText = formatNumber(m.dps);
-
         // OTel
-        document.getElementById('otelCpu').innerText = (m.otelCpu < 1 ? 1 : m.otelCpu) + " vCPU";
-        document.getElementById('otelRam').innerText = formatBytes(m.otelRamBytes);
+        document.getElementById('otelCpu').innerText = (r.otel.cpu < 1 ? 1 : r.otel.cpu) + " vCPU";
+        document.getElementById('otelRam').innerText = r.otel.ram;
 
         // Router
-        document.getElementById('routerReplicas').innerText = m.routerReplicas + " Replicas";
-        document.getElementById('routerCpu').innerHTML = `${m.routerCpu} vCPU <span class="per-pod">(${Math.round((m.routerCpu / m.routerReplicas) * 10) / 10} / Pod)</span>`;
+        document.getElementById('routerReplicas').innerText = r.router.replicas + " Replicas";
+        document.getElementById('routerCpu').innerHTML = `${r.router.cpu} vCPU <span class="per-pod">(${Math.round((r.router.cpu / r.router.replicas) * 10) / 10} / Pod)</span>`;
 
         // Ingestor
-        document.getElementById('ingestorShards').innerText = m.ingestorShards + " Pods";
-        document.getElementById('thanosRam').innerHTML = `${formatBytes(m.thanosRamBytes)} <span class="per-pod">(${formatBytes(m.ingestorRamPerPod)} / Pod)</span>`;
-        document.getElementById('thanosDisk').innerHTML = `${formatBytes(m.totalReceiverDisk)} <span class="per-pod">(${formatBytes(m.receiverDiskPerPod)} / Pod)</span>`;
-        document.getElementById('thanosCpu').innerHTML = `${m.receiveCpu} vCPU <span class="per-pod">(${(m.receiveCpu / m.ingestorShards).toFixed(1)} / Pod)</span>`;
-
-        // Safety
-        document.getElementById('safeReceiveRequestLimit').innerText = m.safeReceiveRequestLimit.toExponential(1);
-        document.getElementById('safeReceiveConcurrency').innerText = m.safeReceiveConcurrency;
-        document.getElementById('safeQueryConcurrent').innerText = m.safeQueryConcurrent;
-        document.getElementById('safeStoreConcurrency').innerText = m.safeStoreConcurrency;
-        document.getElementById('safeStoreSampleLimit').innerText = m.safeStoreSampleLimit.toExponential(1);
-
+        document.getElementById('ingestorShards').innerText = r.ingestor.replicas + " Pods";
+        document.getElementById('thanosRam').innerHTML = `${r.ingestor.ram} <span class="per-pod">Total</span>`;
+        document.getElementById('thanosDisk').innerHTML = `${r.ingestor.pvc} <span class="per-pod">Total</span>`;
+        document.getElementById('thanosCpu').innerHTML = `${r.ingestor.cpu} vCPU <span class="per-pod">(${(r.ingestor.cpu / r.ingestor.replicas).toFixed(1)} / Pod)</span>`;
 
         // S3
-        document.getElementById('s3Storage').innerText = formatBytes(m.totalS3Bytes);
-        document.getElementById('valRaw').innerText = formatBytes(m.s3RawBytes);
-        document.getElementById('val5m').innerText = formatBytes(m.s35mBytes);
-        document.getElementById('val1h').innerText = formatBytes(m.s31hBytes);
+        document.getElementById('s3Storage').innerText = r.S3Size;
 
         // Compactor
-        document.getElementById('compactDisk').innerText = formatBytes(m.compactorScratchBytes);
-        document.getElementById('compactRam').innerText = m.compactorRamGB + " GB";
-        document.getElementById('compactCpu').innerText = m.compactorCpu + " vCPU";
+        document.getElementById('compactDisk').innerText = r.compactor.pvc;
+        document.getElementById('compactRam').innerText = r.compactor.ram;
+        document.getElementById('compactCpu').innerText = r.compactor.cpu + " vCPU";
 
         // Store
-        document.getElementById('storeReplicas').innerText = m.storeReplicas + " Replicas";
-        document.getElementById('storeRam').innerHTML = `${formatBytes(m.storeRamTotal)} <span class="per-pod">(${formatBytes(m.storeRamPerPod)} / Pod)</span>`;
-        document.getElementById('storeCpu').innerHTML = `${m.storeCpu} vCPU <span class="per-pod">(${(m.storeCpuPerPod).toFixed(1)} / Pod)</span>`;
-        document.getElementById('storePvc').innerHTML = `${formatBytes(m.storePvcTotal)} <span class="per-pod">(${formatBytes(m.storePvcPerReplica)} / Pod)</span>`;
-
-        const tipEl = document.getElementById('storePartitionTip');
-        if (tipEl) {
-            tipEl.style.display = m.storePartitionTip ? 'block' : 'none';
-        }
+        document.getElementById('storeReplicas').innerText = r.store.replicas + " Replicas";
+        document.getElementById('storeRam').innerHTML = `${r.store.ram} <span class="per-pod">(${r.store.ram} / Pod)</span>`;
+        document.getElementById('storeCpu').innerHTML = `${r.store.cpu} vCPU <span class="per-pod">(${(r.store.cpu / r.store.replicas).toFixed(1)} / Pod)</span>`;
+        document.getElementById('storePvc').innerHTML = `${r.store.pvc} <span class="per-pod">Total</span>`;
 
         // Frontend
-        document.getElementById('frontendReplicas').innerText = m.frontendReplicas + " Replicas";
-        document.getElementById('frontendCpuVal').innerHTML = `${m.frontendCpu} vCPU <span class="per-pod">(${Math.round(m.frontendCpuPerPod * 10) / 10} / Pod)</span>`;
-        document.getElementById('frontendRamVal').innerHTML = `${formatBytes(m.frontendRamBytes)} <span class="per-pod">(2GB / Pod)</span>`;
+        document.getElementById('frontendReplicas').innerText = r.frontend.replicas + " Replicas";
+        document.getElementById('frontendCpuVal').innerHTML = `${r.frontend.cpu} vCPU <span class="per-pod">(${Math.round(r.frontend.cpu / r.frontend.replicas * 10) / 10} / Pod)</span>`;
+        document.getElementById('frontendRamVal').innerHTML = `${r.frontend.ram} <span class="per-pod">Total</span>`;
 
         // Querier
-        document.getElementById('querierReplicas').innerText = m.querierReplicas + " Replicas";
-        document.getElementById('querierCpuVal').innerHTML = `${m.querierCpu} vCPU <span class="per-pod">(${Math.round(m.querierCpuPerPod * 10) / 10} / Pod)</span>`;
-        document.getElementById('querierRamVal').innerHTML = `${formatBytes(m.querierRamBytes)} <span class="per-pod">(${formatBytes(m.querierRamPerPod)} / Pod)</span>`;
+        document.getElementById('querierReplicas').innerText = r.querier.replicas + " Replicas";
+        document.getElementById('querierCpuVal').innerHTML = `${r.querier.cpu} vCPU <span class="per-pod">(${Math.round(r.querier.cpu / r.querier.replicas * 10) / 10} / Pod)</span>`;
+        document.getElementById('querierRamVal').innerHTML = `${r.querier.ram} <span class="per-pod">Total</span>`;
 
-        // Totals
-        document.getElementById('totalPods').innerText = m.totalThanosPods;
-        document.getElementById('totalCpu').innerText = m.finalTotalCpu + " vCPU";
-        document.getElementById('totalRam').innerText = formatBytes(m.totalRam);
-        document.getElementById('totalPvc').innerText = formatBytes(m.totalPvc);
-        document.getElementById('totalS3').innerText = formatBytes(m.totalS3Bytes);
-
-        // Explanation
-        document.getElementById('explanationText').innerHTML = data.explanation;
-
-        refreshConfigView();
+        // Hide elements that are no longer provided
+        const elementsToHide = ['safeReceiveRequestLimit', 'safeReceiveConcurrency', 'safeQueryConcurrent', 'safeStoreConcurrency', 'safeStoreSampleLimit', 'storePartitionTip', 'valRaw', 'val5m', 'val1h', 'explanationText', 'configOutput'];
+        elementsToHide.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
 
     } catch (e) {
         console.error("Calculation Error:", e);

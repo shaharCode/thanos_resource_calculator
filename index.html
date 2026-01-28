@@ -464,43 +464,6 @@
                     </table>
                 </div>
             </div>
-
-            <!-- NEW: Generated Configuration Panel -->
-            <div class="config-panel">
-                <div class="config-title">📝 Generated Configuration (YAML)</div>
-                <div class="config-tabs">
-                    <div class="config-tab active" data-key="receive" onclick="activateTab(this)">Receiver</div>
-                    <div class="config-tab" data-key="store" onclick="activateTab(this)">Store Gateway</div>
-                    <div class="config-tab" data-key="query" onclick="activateTab(this)">Querier</div>
-                    <div class="config-tab" data-key="compactor" onclick="activateTab(this)">Compactor</div>
-                    <div class="config-tab" data-key="frontend" onclick="activateTab(this)">Frontend</div>
-                </div>
-                <div class="config-content">
-                    <button class="copy-config-btn" onclick="copyConfig()">Copy</button>
-                    <div id="configOutput"></div>
-                </div>
-            </div>
-
-            <div class="faq-panel" id="queryPanel">
-                <div class="faq-title">🔎 Current State Checks (PromQL)</div>
-                <div class="query-item">
-                    <span class="query-label">Active Series (Sum of all Ingestors):</span>
-                    <div class="code-box">
-                        <code>sum(thanos_receive_tenant_active_series)</code>
-                        <button class="copy-btn"
-                            onclick="copyToClipboard('sum(thanos_receive_tenant_active_series)')">Copy</button>
-                    </div>
-                </div>
-                <div class="query-item">
-                    <span class="query-label">Ingestion Rate (Total Router Throughput):</span>
-                    <div class="code-box">
-                        <code>sum(rate(thanos_receive_received_samples_total[1m]))</code>
-                        <button class="copy-btn"
-                            onclick="copyToClipboard('sum(rate(thanos_receive_received_samples_total[1m]))')">Copy</button>
-                    </div>
-                </div>
-            </div>
-
         </div>
     </div>
 
