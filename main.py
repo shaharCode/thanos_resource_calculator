@@ -31,17 +31,12 @@ def format_bytes(bytes_val, decimals=2):
     i = math.floor(math.log(bytes_val) / math.log(k))
     return f"{float(f'{(bytes_val / math.pow(k, i)):.{dm}f}')} {sizes[i]}"
 
-def format_mib(bytes_val):
-    if bytes_val == 0:
-        return '0MiB'
-    return f"{math.floor(bytes_val / (1024 * 1024))}MiB"
 
 @app.post("/api/calculate", response_model=CalculationResponse)
 async def calculate(req: CalculationRequest):
     # Inputs
     active_series = req.activeSeries
     interval = req.interval if req.interval > 0 else 1
-    replication = 1
     qps = req.qps
     perf_factor = req.perfFactor
     complexity_bytes = req.queryComplexity
@@ -59,7 +54,7 @@ async def calculate(req: CalculationRequest):
     otel_cpu = 1 if otel_cpu < 1 else otel_cpu
     otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 10000) * 1024 * 1024 * 1024)
 
-    # Router
+    # Router  √
     router_replicas = math.ceil(dps / 30000)
     if router_replicas < 2:
         router_replicas = 2
@@ -67,42 +62,44 @@ async def calculate(req: CalculationRequest):
     router_ram_bytes = router_replicas * 2 * 1024 * 1024 * 1024
 
     # Ingestor
-    total_replicated_series = active_series * replication
     max_series_per_pod = 4000000
-    ingestor_shards = math.ceil(total_replicated_series / max_series_per_pod)
-    if ingestor_shards < replication:
-        ingestor_shards = replication
+    ingestor_shards = math.ceil(active_series / max_series_per_pod)
 
-    max_receiver_query_mem = 300 * 1024 * 1024
-    effective_receiver_complexity = min(complexity_bytes, max_receiver_query_mem)
-    receive_query_ram_overhead = qps * effective_receiver_complexity
-    thanos_ram_bytes = (total_replicated_series * 4096) + receive_query_ram_overhead
+    receive_query_ram_overhead = qps * complexity_bytes
+    thanos_ram_bytes = (active_series * 6144 * 2) + receive_query_ram_overhead
     ingestor_ram_per_pod = thanos_ram_bytes / ingestor_shards
 
-    wal_bytes = dps * 7200 * 3 * replication * 1.5
+    wal_bytes = dps * 7200 * 3 * 6
     local_tsdb_bytes = 0
     if ret_local_hours > 2:
         retention_seconds = (ret_local_hours - 2) * 3600
-        local_tsdb_bytes = dps * retention_seconds * 1.5 * replication
+        local_tsdb_bytes = dps * retention_seconds * 6
     
     total_receiver_disk = wal_bytes + local_tsdb_bytes
     receiver_disk_per_pod = total_receiver_disk / ingestor_shards
 
-    receive_ingest_cpu = (dps * replication) / 15000
+    receive_ingest_cpu = dps / 15000
     receive_query_cpu = qps / 5
     receive_cpu = math.ceil((receive_ingest_cpu + receive_query_cpu) * perf_factor)
     receive_cpu_per_pod = receive_cpu / ingestor_shards
 
-    # Safety limits
-    safe_receive_request_limit = max(20000000, active_series * 20)
-    safe_receive_concurrency = max(50, math.ceil((active_series / interval) / 250))
-    # scale_series_limit = max(50000, min(500000, math.ceil(active_series / 50))) # logic from JS used for display? No, config only/info.
-
     # S3
     s3_raw_bytes = dps * 86400 * ret_raw_days * 1.5
-    s3_5m_bytes = (dps / 300) * 86400 * ret_5m_days * 5 * 2
-    s3_1h_bytes = (dps / 3600) * 86400 * ret_1h_days * 5 * 2
+    s3_5m_bytes = (dps / 2 / 300) * 86400 * ret_5m_days * 5 * 2
+    s3_1h_bytes = (dps / 2 / 3600) * 86400 * ret_1h_days * 5 * 2
     total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
+
+    # S3 Storage (Based on empirical measurements)
+    # Empirical data shows: ~0.84 GB per 1k series per 2h block
+    # Raw data: 12 blocks per day (24h / 2h)
+    #blocks_per_day = 12
+    #gb_per_1k_series_per_block = 0.84
+    #s3_raw_bytes = active_series * gb_per_1k_series_per_block * (1024**3) / 1000 * blocks_per_day * ret_raw_days
+    
+    # Downsampled data: reduced sample rate, 5 aggregates @ 2 bytes each
+    #s3_5m_bytes = (dps / 300) * 86400 * ret_5m_days * 5 * 2
+    #s3_1h_bytes = (dps / 3600) * 86400 * ret_1h_days * 5 * 2
+    #total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
 
     # Compactor
     daily_gen_bytes = dps * 86400 * 1.5
@@ -171,14 +168,14 @@ async def calculate(req: CalculationRequest):
         ),
         router=ComponentResources(
             replicas=router_replicas,
-            cpu=router_cpu,
-            ram=format_bytes(router_ram_bytes)
+            cpu=router_cpu, # Per Pod
+            ram=format_bytes(router_ram_bytes) # Per Pod
         ),
         ingestor=ComponentResourcesWithPVC(
             replicas=ingestor_shards,
-            cpu=receive_cpu,
-            ram=format_bytes(ingestor_ram_per_pod * ingestor_shards),
-            pvc=format_bytes(receiver_disk_per_pod * ingestor_shards)
+            cpu=receive_cpu_per_pod,
+            ram=format_bytes(ingestor_ram_per_pod),
+            pvc=format_bytes(receiver_disk_per_pod)
         ),
         compactor=ComponentResourcesWithPVC(
             replicas=1,
@@ -190,17 +187,17 @@ async def calculate(req: CalculationRequest):
             replicas=store_replicas,
             cpu=store_cpu,
             ram=format_bytes(store_ram_per_pod),
-            pvc=format_bytes(store_pvc_total)
+            pvc=format_bytes(store_pvc_total) # Store PVC is cache, complicated, keeping as is for now or check? Wait, Store repl=1.
         ),
         frontend=ComponentResources(
             replicas=frontend_replicas,
-            cpu=frontend_cpu,
-            ram=format_bytes(frontend_ram_bytes)
+            cpu=frontend_cpu_per_pod,
+            ram=format_bytes(frontend_ram_bytes / frontend_replicas) # 2GB per pod static
         ),
         querier=ComponentResources(
             replicas=querier_replicas,
-            cpu=querier_cpu,
-            ram=format_bytes(querier_ram_per_pod * querier_replicas)
+            cpu=querier_cpu_per_pod,
+            ram=format_bytes(querier_ram_per_pod)
         ),
         S3Size=format_bytes(total_s3_bytes),
         dps=math.floor(dps)

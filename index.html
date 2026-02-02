@@ -150,7 +150,7 @@
 
                 <!-- 2a. Thanos Router -->
                 <div class="result-card card-router">
-                    <div class="card-title" style="color: var(--router-color);">2a. Receive Router (Hashring)</div>
+                    <div class="card-title" style="color: var(--router-color);">2a. Receive Router</div>
                     <div class="metric-row">
                         <div class="card-value" id="routerReplicas">2 Replicas</div>
                         <div class="card-detail">Stateless Distributor</div>
@@ -158,19 +158,19 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="routerCpu">2 vCPU</div>
-                        <div class="card-detail">Total vCPU</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: Replicas * 1 Core * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="routerRam">0 GB</div>
-                        <div class="card-detail">Total RAM</div>
+                        <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: Replicas * 1GB</span>
                     </div>
                 </div>
 
                 <!-- 2b. Thanos Ingestor -->
                 <div class="result-card card-receive">
-                    <div class="card-title" style="color: var(--receive-color);">2b. Receive Ingestors (Store)</div>
+                    <div class="card-title" style="color: var(--receive-color);">2b. Receive Ingestor</div>
                     <div class="metric-row">
                         <div class="card-value" id="ingestorShards">3 Pods</div>
                         <div class="card-detail">Shards (StatefulSet)</div>
@@ -178,17 +178,17 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="thanosRam">0 GB</div>
-                        <div class="card-detail">Total Cluster RAM</div>
+                        <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: (Series * 4KB) + (QPS Overhead)</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="thanosDisk">0 GB</div>
-                        <div class="card-detail">Total PVC (All Shards)</div>
+                        <div class="card-detail">PVC (Per Replica)</div>
                         <span class="formula-text">Form: WAL + Local TSDB Blocks</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="thanosCpu">0 vCPU</div>
-                        <div class="card-detail">Total Ingest+Query CPU</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: Ingestion + Query Load * Perf</span>
                     </div>
                 </div>
@@ -196,6 +196,11 @@
                 <!-- 3. Thanos Compactor -->
                 <div class="result-card card-compact">
                     <div class="card-title" style="color: var(--compact-color);">3. Thanos Compactor</div>
+                    <div class="metric-row">
+                        <div class="card-value" id="compactReplicas">1</div>
+                        <div class="card-detail">Replicas</div>
+                        <span class="formula-text">Singleton (Vertical Scaling)</span>
+                    </div>
                     <div class="metric-row">
                         <div class="card-value" id="compactDisk">0 GB</div>
                         <div class="card-detail">Scratch Disk PVC</div>
@@ -208,7 +213,7 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="compactCpu">1 vCPU</div>
-                        <div class="card-detail">CPU</div>
+                        <div class="card-detail">CPU (Singleton)</div>
                         <span class="formula-text">Form: 1 Core (Vertical)</span>
                     </div>
                 </div>
@@ -223,12 +228,12 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="storeRam">0 GB</div>
-                        <div class="card-detail">Total RAM (Index+Buff)</div>
+                        <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: (S3 * 0.2%) + (QPS * Complexity)</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="storeCpu">0 vCPU</div>
-                        <div class="card-detail">Total CPU</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: ((Series/1.5M) + (QPS/15)) * Perf</span>
                     </div>
                     <div class="metric-row">
@@ -262,12 +267,12 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="frontendCpuVal">1 vCPU</div>
-                        <div class="card-detail">Total vCPU</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: (Replicas * 1 Core) * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="frontendRamVal">2 GB</div>
-                        <div class="card-detail">Total RAM (Cache)</div>
+                        <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: Replicas * 2GB</span>
                     </div>
                 </div>
@@ -282,16 +287,16 @@
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="querierCpuVal">2 vCPU</div>
-                        <div class="card-detail">Total vCPU</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: (Replicas * 2 Core) * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="querierRamVal">4 GB</div>
-                        <div class="card-detail">Total RAM (Fan-out)</div>
+                        <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: Replicas * Complexity</span>
                     </div>
                 </div>
-
+                
                 <!-- 7. Storage -->
                 <div class="result-card card-storage">
                     <div class="card-title" style="color: var(--storage-color);">7. Object Storage (S3)</div>

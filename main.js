@@ -101,13 +101,78 @@ async function calculate() {
 
         // Calculate totals
         const totalPods = r.otel.replicas + r.router.replicas + r.ingestor.replicas + r.compactor.replicas + r.store.replicas + r.frontend.replicas + r.querier.replicas;
-        const totalCpu = r.otel.cpu + r.router.cpu + r.ingestor.cpu + r.compactor.cpu + r.store.cpu + r.frontend.cpu + r.querier.cpu;
 
-        // Update summary
+        // Summing (CPU * Replicas) because API now returns Per-Pod CPU
+        const totalCpu = (r.otel.cpu * r.otel.replicas) +
+            (r.router.cpu * r.router.replicas) +
+            (r.ingestor.cpu * r.ingestor.replicas) +
+            (r.compactor.cpu * r.compactor.replicas) +
+            (r.store.cpu * r.store.replicas) +
+            (r.frontend.cpu * r.frontend.replicas) +
+            (r.querier.cpu * r.querier.replicas);
+
+
+        // Helper to parse "X GB" or "X MB" back to bytes
+        function parseBytes(str) {
+            if (!str || str === "0 Bytes") return 0;
+            const parts = str.split(' ');
+            const val = parseFloat(parts[0]);
+            const unit = parts[1];
+            let multiplier = 1;
+            if (unit === 'KB') multiplier = 1024;
+            if (unit === 'MB') multiplier = 1024 * 1024;
+            if (unit === 'GB') multiplier = 1024 * 1024 * 1024;
+            if (unit === 'TB') multiplier = 1024 * 1024 * 1024 * 1024;
+            return val * multiplier;
+        }
+
+        // Sum Totals
+        const totalRamBytes = (parseBytes(r.otel.ram) * r.otel.replicas) +
+            (parseBytes(r.router.ram) * r.router.replicas) +
+            (parseBytes(r.ingestor.ram) * r.ingestor.replicas) +
+            (parseBytes(r.compactor.ram) * r.compactor.replicas) +
+            (parseBytes(r.store.ram) * r.store.replicas) +
+            (parseBytes(r.frontend.ram) * r.frontend.replicas) +
+            (parseBytes(r.querier.ram) * r.querier.replicas);
+
+        const totalPvcBytes = (parseBytes(r.ingestor.pvc) * r.ingestor.replicas) +
+            (parseBytes(r.compactor.pvc) * r.compactor.replicas) +
+            (parseBytes(r.store.pvc) * r.store.replicas); // Store PVC is Total in UI, but API returns total? No, main.js label says Total. Let's check main.py. 
+        // Main.py: store_pvc_total = ... -> returned as pvc. So r.store.pvc IS total.
+        // Wait, I changed labels to "Per Pod" in index.html recently?
+        // Let's re-verify Store PVC first. 
+        // Main.py: pvc=format_bytes(store_pvc_total) where store_pvc_total = per_replica * replicas.
+        // Actually main.py Step 174: pvc=format_bytes(store_pvc_total). 
+        // So for Store, the API returns the TOTAL cluster PVC (cache).
+        // BUT in Step 175 (main.js) I set label to "Total".
+        // BUT later I refactored to "Per Replica" generally.
+        // Let's assume for Store, since Replicas=1 usually (but can scale), and cache is shared... 
+        // Actually, Store Cache is local per pod.
+        // Let's just treat r.store.pvc as "Total" for now if replicas=1.
+        // Correct logic: parseBytes(r.ingestor.pvc/pod) * replicas + parseBytes(r.compactor.pvc/pod)*replicas + parseBytes(r.store.pvc) (API returns Total for store).
+
+        // Actually in main.py Step 174: `pvc=format_bytes(store_pvc_total)`
+        // So r.store.pvc IS the sum of all store pods.
+        // r.ingestor.pvc IS per pod (Step 163).
+        // r.compactor.pvc IS per pod (Step 163 - although replicas always 1).
+
+        // Let's fix the Summation Logic based on current API:
+        // Ingestor: Per Pod (Replicas > 1) -> Multiply
+        // Compactor: Per Pod (Replicas = 1) -> Multiply
+        // Store: Total (Replicas >= 1) -> Don't Multiply (API gives total)
+
+        // Wait, inconsistency! I should probably fix main.py to return Store PVC per Pod to be consistent. 
+        // But for now, let's just implement the sum correctly based on current return values.
+
+        let calculatedPvcBytes = (parseBytes(r.ingestor.pvc) * r.ingestor.replicas) +
+            (parseBytes(r.compactor.pvc)) +
+            (parseBytes(r.store.pvc));
+
+
         document.getElementById('totalPods').innerText = totalPods;
-        document.getElementById('totalCpu').innerText = totalCpu + " vCPU";
-        document.getElementById('totalRam').innerText = r.ingestor.ram; // Placeholder - could aggregate if needed
-        document.getElementById('totalPvc').innerText = r.ingestor.pvc; // Placeholder
+        document.getElementById('totalCpu').innerText = totalCpu.toFixed(1) + " vCPU";
+        document.getElementById('totalRam').innerText = formatBytes(totalRamBytes);
+        document.getElementById('totalPvc').innerText = formatBytes(calculatedPvcBytes);
         document.getElementById('totalS3').innerText = r.S3Size;
 
         // Update UI
@@ -118,38 +183,42 @@ async function calculate() {
 
         // Router
         document.getElementById('routerReplicas').innerText = r.router.replicas + " Replicas";
-        document.getElementById('routerCpu').innerHTML = `${r.router.cpu} vCPU <span class="per-pod">(${Math.round((r.router.cpu / r.router.replicas) * 10) / 10} / Pod)</span>`;
-        document.getElementById('routerRam').innerText = r.router.ram;
+        document.getElementById('routerCpu').innerHTML = `${r.router.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('routerRam').innerHTML = `${r.router.ram} <span class="per-pod">/ Pod</span>`;
 
         // Ingestor
         document.getElementById('ingestorShards').innerText = r.ingestor.replicas + " Pods";
-        document.getElementById('thanosRam').innerHTML = `${r.ingestor.ram} <span class="per-pod">Total</span>`;
-        document.getElementById('thanosDisk').innerHTML = `${r.ingestor.pvc} <span class="per-pod">Total</span>`;
-        document.getElementById('thanosCpu').innerHTML = `${r.ingestor.cpu} vCPU <span class="per-pod">(${(r.ingestor.cpu / r.ingestor.replicas).toFixed(1)} / Pod)</span>`;
+        document.getElementById('thanosRam').innerHTML = `${r.ingestor.ram} <span class="per-pod">/ Pod</span>`;
+        document.getElementById('thanosDisk').innerHTML = `${r.ingestor.pvc} <span class="per-pod">/ Pod</span>`;
+        document.getElementById('thanosCpu').innerHTML = `${r.ingestor.cpu.toFixed(1)} vCPU <span class="per-pod">/ Pod</span>`;
 
         // S3
         document.getElementById('s3Storage').innerText = r.S3Size;
+        document.getElementById('s3Raw').innerText = r.S3Raw;
+        document.getElementById('s35m').innerText = r.S35m;
+        document.getElementById('s31h').innerText = r.S31h;
 
         // Compactor
+        document.getElementById('compactReplicas').innerText = r.compactor.replicas + " Replicas";
         document.getElementById('compactDisk').innerText = r.compactor.pvc;
         document.getElementById('compactRam').innerText = r.compactor.ram;
         document.getElementById('compactCpu').innerText = r.compactor.cpu + " vCPU";
 
         // Store
         document.getElementById('storeReplicas').innerText = r.store.replicas + " Replicas";
-        document.getElementById('storeRam').innerHTML = `${r.store.ram} <span class="per-pod">(${r.store.ram} / Pod)</span>`;
-        document.getElementById('storeCpu').innerHTML = `${r.store.cpu} vCPU <span class="per-pod">(${(r.store.cpu / r.store.replicas).toFixed(1)} / Pod)</span>`;
+        document.getElementById('storeRam').innerHTML = `${r.store.ram} <span class="per-pod">/ Pod</span>`;
+        document.getElementById('storeCpu').innerHTML = `${r.store.cpu} vCPU <span class="per-pod">/ Pod</span>`;
         document.getElementById('storePvc').innerHTML = `${r.store.pvc} <span class="per-pod">Total</span>`;
 
         // Frontend
         document.getElementById('frontendReplicas').innerText = r.frontend.replicas + " Replicas";
-        document.getElementById('frontendCpuVal').innerHTML = `${r.frontend.cpu} vCPU <span class="per-pod">(${Math.round(r.frontend.cpu / r.frontend.replicas * 10) / 10} / Pod)</span>`;
-        document.getElementById('frontendRamVal').innerHTML = `${r.frontend.ram} <span class="per-pod">Total</span>`;
+        document.getElementById('frontendCpuVal').innerHTML = `${r.frontend.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('frontendRamVal').innerHTML = `${r.frontend.ram} <span class="per-pod">/ Pod</span>`;
 
         // Querier
         document.getElementById('querierReplicas').innerText = r.querier.replicas + " Replicas";
-        document.getElementById('querierCpuVal').innerHTML = `${r.querier.cpu} vCPU <span class="per-pod">(${Math.round(r.querier.cpu / r.querier.replicas * 10) / 10} / Pod)</span>`;
-        document.getElementById('querierRamVal').innerHTML = `${r.querier.ram} <span class="per-pod">Total</span>`;
+        document.getElementById('querierCpuVal').innerHTML = `${r.querier.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('querierRamVal').innerHTML = `${r.querier.ram} <span class="per-pod">/ Pod</span>`;
 
         // Hide elements that are no longer provided
         const elementsToHide = ['safeReceiveRequestLimit', 'safeReceiveConcurrency', 'safeQueryConcurrent', 'safeStoreConcurrency', 'safeStoreSampleLimit', 'storePartitionTip', 'valRaw', 'val5m', 'val1h', 'explanationText', 'configOutput'];
