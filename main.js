@@ -112,12 +112,14 @@ async function calculate() {
 
         // Update UI
         // OTel
+        document.getElementById('otelReplicas').innerText = r.otel.replicas + " Replicas";
         document.getElementById('otelCpu').innerText = (r.otel.cpu < 1 ? 1 : r.otel.cpu) + " vCPU";
         document.getElementById('otelRam').innerText = r.otel.ram;
 
         // Router
         document.getElementById('routerReplicas').innerText = r.router.replicas + " Replicas";
         document.getElementById('routerCpu').innerHTML = `${r.router.cpu} vCPU <span class="per-pod">(${Math.round((r.router.cpu / r.router.replicas) * 10) / 10} / Pod)</span>`;
+        document.getElementById('routerRam').innerText = r.router.ram;
 
         // Ingestor
         document.getElementById('ingestorShards').innerText = r.ingestor.replicas + " Pods";

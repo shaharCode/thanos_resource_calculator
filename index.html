@@ -132,6 +132,11 @@
                 <div class="result-card card-otel">
                     <div class="card-title" style="color: var(--otel-color);">1. OTel Collector</div>
                     <div class="metric-row">
+                        <div class="card-value" id="otelReplicas">1</div>
+                        <div class="card-detail">Replicas</div>
+                        <span class="formula-text">Form: Vertical Scaling</span>
+                    </div>
+                    <div class="metric-row">
                         <div class="card-value" id="otelCpu">0 vCPU</div>
                         <div class="card-detail">CPU (Ingestion)</div>
                         <span class="formula-text">Form: ceil(DPS / 10,000) * Perf</span>
@@ -155,6 +160,11 @@
                         <div class="card-value" id="routerCpu">2 vCPU</div>
                         <div class="card-detail">Total vCPU</div>
                         <span class="formula-text">Form: Replicas * 1 Core * Perf</span>
+                    </div>
+                    <div class="metric-row">
+                        <div class="card-value" id="routerRam">0 GB</div>
+                        <div class="card-detail">Total RAM</div>
+                        <span class="formula-text">Form: Replicas * 1GB</span>
                     </div>
                 </div>
 

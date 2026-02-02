@@ -54,8 +54,8 @@ async def calculate(req: CalculationRequest):
     # DPS
     dps = active_series / interval
 
-    # OTel
-    otel_cpu = math.ceil((dps / 10000) * perf_factor)
+    # OTel  √
+    otel_cpu = math.ceil((dps / 20000) * perf_factor)
     otel_cpu = 1 if otel_cpu < 1 else otel_cpu
     otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 10000) * 1024 * 1024 * 1024)
 
@@ -64,7 +64,7 @@ async def calculate(req: CalculationRequest):
     if router_replicas < 2:
         router_replicas = 2
     router_cpu = math.ceil((router_replicas * 1) * perf_factor)
-    router_ram_bytes = router_replicas * 1 * 1024 * 1024 * 1024
+    router_ram_bytes = router_replicas * 2 * 1024 * 1024 * 1024
 
     # Ingestor
     total_replicated_series = active_series * replication
