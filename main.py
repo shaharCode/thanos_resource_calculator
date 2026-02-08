@@ -11,7 +11,28 @@ from models import (
     ComponentResourcesWithPVC
 )
 
-app = FastAPI()
+app = FastAPI(
+    title="Thanos Resource Calculator",
+    description="""
+## API Reference
+- `POST /api/calculate`: Calculate resource requirements based on input parameters.
+
+### Values Example:
+```json
+{
+  "activeSeries": 100000,
+  "interval": 60,
+  "qps": 15,
+  "perfFactor": 1.3, //(1.0 - Cost Optimized, 1.3 - Balanced, 2.0 - Low Latency)
+  "queryComplexity": 268435456, //52428800 (Light (Instant Queries) - 50MB), 268435456 (Medium (1h Range) - 250MB), 1610612736 (Heavy (1d-3d Range) - 1.5GB), 3221225472 (Extreme (30d+ / High Card) - 3GB)
+  "retLocalHours": 6,
+  "retRawDays": 14,
+  "ret5mDays": 90,
+  "ret1hDays": 365
+}
+```
+"""
+)
 
 app.add_middleware(
     CORSMiddleware,
