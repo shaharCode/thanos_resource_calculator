@@ -296,22 +296,17 @@
                         <span class="formula-text">Form: Replicas * Complexity</span>
                     </div>
                 </div>
-                
+
                 <!-- 7. Storage -->
-                <div class="result-card card-storage">
-                    <div class="card-title" style="color: var(--storage-color);">7. Object Storage (S3)</div>
-                    <div class="metric-row">
+                <div class="result-card card-storage" style="display: flex; flex-direction: column;">
+                    <div class="card-title" style="color: var(--s3-color);">7. Object Storage (S3)</div>
+                    <div class="metric-row"
+                        style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; border-bottom: none;">
                         <div class="card-value" id="s3Storage">0 GB</div>
                         <div class="card-detail">Total Capacity (S3)</div>
                         <span class="formula-text">Form: Raw + 5m (x5) + 1h (x5)</span>
                     </div>
-                    <div class="metric-row">
-                        <div style="font-size:0.75rem; color:#94a3b8; display:flex; justify-content:space-between;">
-                            <span>Raw: <span id="valRaw" style="color:white"></span></span>
-                            <span>5m: <span id="val5m" style="color:white"></span></span>
-                            <span>1h: <span id="val1h" style="color:white"></span></span>
-                        </div>
-                    </div>
+
                 </div>
 
             </div>
