@@ -194,11 +194,9 @@ async function calculate() {
 
         // S3
         document.getElementById('s3Storage').innerText = r.S3Size;
-        document.getElementById('s3Raw').innerText = r.S3Raw;
-        document.getElementById('s35m').innerText = r.S35m;
-        document.getElementById('s31h').innerText = r.S31h;
 
         // Compactor
+        console.log('Compactor data:', r.compactor); // DEBUG
         document.getElementById('compactReplicas').innerText = r.compactor.replicas + " Replicas";
         document.getElementById('compactDisk').innerText = r.compactor.pvc;
         document.getElementById('compactRam').innerText = r.compactor.ram;

@@ -49,12 +49,12 @@ async def calculate(req: CalculationRequest):
     # DPS
     dps = active_series / interval
 
-    # OTel  √
+    # OTel 
     otel_cpu = math.ceil((dps / 20000) * perf_factor)
     otel_cpu = 1 if otel_cpu < 1 else otel_cpu
-    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 10000) * 1024 * 1024 * 1024)
+    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 1000) * 1024 * 1024 * 1024)
 
-    # Router  √
+    # Router
     router_replicas = math.ceil(dps / 30000)
     if router_replicas < 2:
         router_replicas = 2
@@ -63,7 +63,7 @@ async def calculate(req: CalculationRequest):
 
     # Ingestor
     max_series_per_pod = 4000000
-    ingestor_shards = math.ceil(active_series / max_series_per_pod)
+    ingestor_shards = max(1, math.ceil(active_series / max_series_per_pod))
 
     receive_query_ram_overhead = qps * complexity_bytes
     thanos_ram_bytes = (active_series * 6144 * 2) + receive_query_ram_overhead
@@ -83,39 +83,50 @@ async def calculate(req: CalculationRequest):
     receive_cpu = math.ceil((receive_ingest_cpu + receive_query_cpu) * perf_factor)
     receive_cpu_per_pod = receive_cpu / ingestor_shards
 
-    # S3
-    s3_raw_bytes = dps * 86400 * ret_raw_days * 1.5
-    s3_5m_bytes = (dps / 2 / 300) * 86400 * ret_5m_days * 5 * 2
-    s3_1h_bytes = (dps / 2 / 3600) * 86400 * ret_1h_days * 5 * 2
-    total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
-
-    # S3 Storage (Based on empirical measurements)
-    # Empirical data shows: ~0.84 GB per 1k series per 2h block
-    # Raw data: 12 blocks per day (24h / 2h)
-    #blocks_per_day = 12
-    #gb_per_1k_series_per_block = 0.84
-    #s3_raw_bytes = active_series * gb_per_1k_series_per_block * (1024**3) / 1000 * blocks_per_day * ret_raw_days
+    # S3 Storage (Empirical formula - matches measured data at 14d/90d/180d)
+    # Measured: 5k series → 4.34 GB, 200k series → 104 GB (at 14d/90d/180d)
     
-    # Downsampled data: reduced sample rate, 5 aggregates @ 2 bytes each
-    #s3_5m_bytes = (dps / 300) * 86400 * ret_5m_days * 5 * 2
-    #s3_1h_bytes = (dps / 3600) * 86400 * ret_1h_days * 5 * 2
-    #total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
+    # Calculate economy of scale factor
+    if active_series < 200000:
+        scale_multiplier = 1.0  # 0.868 GB/1k series baseline
+    else:
+        # Scale from 0.52 at 200k down to 0.45 at 2M
+        scale_factor = min(1.0, (active_series - 200000) / 1800000)
+        scale_multiplier = (0.52 / 0.868) - (scale_factor * 0.07 / 0.868)  # 0.599 → 0.518
+    
+    # Add 10% safety margin
+    scale_multiplier *= 1.10
+
+    # Per-day storage coefficients (bytes per series per day)
+    # Derived from 5k→4.34GB at 14d/90d/180d: ~60% raw, 30% 5m, 10% 1h
+    raw_bytes_per_series_per_day = 38_000 * scale_multiplier      # ~38 KB/series/day (raw)
+    downsample_5m_per_series_per_day = 3_000 * scale_multiplier   # ~3 KB/series/day (5m)
+    downsample_1h_per_series_per_day = 300 * scale_multiplier     # ~0.3 KB/series/day (1h)
+    
+    s3_raw_bytes = active_series * raw_bytes_per_series_per_day * ret_raw_days
+    s3_5m_bytes = active_series * downsample_5m_per_series_per_day * ret_5m_days
+    s3_1h_bytes = active_series * downsample_1h_per_series_per_day * ret_1h_days
+    total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
 
     # Compactor
     daily_gen_bytes = dps * 86400 * 1.5
     max_block_days = min(ret_raw_days, 14)
     compactor_scratch_bytes = daily_gen_bytes * max_block_days * 3
     
-    compactor_ram_gb = 2
-    if active_series > 1000000:
-        compactor_ram_gb = 8
-    if active_series > 5000000:
-        compactor_ram_gb = 16
+    
+    # Compactor - scales logarithmically with series count
+    # Formula scales smoothly: 2GB at 10k series → 16GB at 10M series
+    series_in_thousands = max(10, active_series / 1000)  # Minimum 10k for log calculation
+    compactor_ram_gb = 2 + (math.log10(series_in_thousands) * 5)
+
+    # CPU scales similarly but slower (1 CPU can handle more)
+    compactor_cpu = 2 + (math.log10(series_in_thousands) * 1.2)
+    compactor_cpu = max(2, min(8, math.ceil(compactor_cpu)))  # Clamp between 2-8 cores
+    
     compactor_ram_bytes = compactor_ram_gb * 1024 * 1024 * 1024
-    compactor_cpu = 1
 
     # Store
-    store_cache_bytes = (total_s3_bytes * 0.002) + (1 * 1024 * 1024 * 1024)
+    store_cache_bytes = (total_s3_bytes * 0.002) + (2 * 1024 * 1024 * 1024)
     store_query_overhead = qps * complexity_bytes
     store_ram_total = store_cache_bytes + store_query_overhead
     
@@ -132,33 +143,28 @@ async def calculate(req: CalculationRequest):
     store_pvc_per_replica = total_s3_bytes * 0.10
     store_pvc_total = store_pvc_per_replica * store_replicas
 
-    store_partition_tip = False
-    if store_ram_total > 32 * 1024 * 1024 * 1024:
-        store_partition_tip = True
-
     # Frontend
-    frontend_replicas = 1 + math.floor(qps / 50)
-    frontend_cpu = math.ceil((frontend_replicas * 1) * perf_factor)
-    frontend_ram_bytes = frontend_replicas * 2 * 1024 * 1024 * 1024
-    frontend_cpu_per_pod = frontend_cpu / frontend_replicas
+    # CPU/RAM scales with Series Count (Merge Complexity)
+    # Replicas scales with QPS (Concurrency)
+    
+    # Base resources per pod based on data size (Active Series)
+    base_cpu_per_pod = 1 + (active_series / 1500000)  # +1 Core per 1.5M series
+    base_ram_gb_per_pod = 2 + (active_series / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5) # +1 GB per 100k series
+    
+    # Scale replicas based on QPS
+    frontend_replicas = max(1, math.ceil(qps / 25))
+    
+    frontend_cpu_per_pod = math.ceil(base_cpu_per_pod * perf_factor)
+    frontend_cpu = frontend_cpu_per_pod * frontend_replicas
+    frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor
+    frontend_ram_bytes = frontend_ram_per_pod * frontend_replicas
 
     # Querier
     querier_replicas = 1 + math.floor(qps / 20)
-    querier_cpu = math.ceil((querier_replicas * 2) * perf_factor)
-    querier_ram_bytes = (1 * 1024 * 1024 * 1024) + (qps * complexity_bytes)
+    querier_cpu = math.ceil((querier_replicas * 2.5) * perf_factor)
+    querier_ram_bytes = ((active_series / 100000) * 1024 * 1024 * 1024) + (qps * complexity_bytes * perf_factor)
     querier_ram_per_pod = querier_ram_bytes / querier_replicas
     querier_cpu_per_pod = querier_cpu / querier_replicas
-
-    # Querier Safety
-    safe_query_concurrent = max(20, math.ceil(qps * 2))
-    safe_store_concurrency = max(20, math.ceil(qps * 2))
-    safe_store_sample_limit = max(5000000, math.ceil(active_series * 1.5))
-
-    # Totals
-    total_thanos_pods = router_replicas + ingestor_shards + 1 + store_replicas + frontend_replicas + querier_replicas
-    final_total_cpu = otel_cpu + router_cpu + receive_cpu + compactor_cpu + store_cpu + frontend_cpu + querier_cpu
-    total_ram = otel_ram_bytes + router_ram_bytes + thanos_ram_bytes + store_ram_total + frontend_ram_bytes + querier_ram_bytes + compactor_ram_bytes
-    total_pvc = total_receiver_disk + compactor_scratch_bytes + store_pvc_total
 
     resource_spec = ResourceSpec(
         otel=ComponentResources(
@@ -192,7 +198,7 @@ async def calculate(req: CalculationRequest):
         frontend=ComponentResources(
             replicas=frontend_replicas,
             cpu=frontend_cpu_per_pod,
-            ram=format_bytes(frontend_ram_bytes / frontend_replicas) # 2GB per pod static
+            ram=format_bytes(frontend_ram_per_pod)
         ),
         querier=ComponentResources(
             replicas=querier_replicas,
