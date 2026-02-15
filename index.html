@@ -137,14 +137,14 @@
                         <span class="formula-text">Form: Vertical Scaling</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="otelCpu">0 vCPU</div>
+                        <div class="card-value" id="otelCpu">0</div>
                         <div class="card-detail">CPU (Ingestion)</div>
-                        <span class="formula-text">Form: ceil(DPS / 10,000) * Perf</span>
+                        <span class="formula-text">Form: ceil(DPS / 20k) * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="otelRam">0 GB</div>
                         <div class="card-detail">RAM (Buffer)</div>
-                        <span class="formula-text">Form: 512MB + (DPS/10k)GB</span>
+                        <span class="formula-text">Form: 512MB + (DPS/5k)GB</span>
                     </div>
                 </div>
 
@@ -157,7 +157,7 @@
                         <span class="formula-text">Form: ceil(DPS / 30,000)</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="routerCpu">2 vCPU</div>
+                        <div class="card-value" id="routerCpu">2</div>
                         <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: Replicas * 1 Core * Perf</span>
                     </div>
@@ -177,6 +177,11 @@
                         <span class="formula-text">Auto-scale: Max 4M Series/Pod</span>
                     </div>
                     <div class="metric-row">
+                        <div class="card-value" id="thanosCpu">0</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
+                        <span class="formula-text">Form: Ingestion + Query Load * Perf</span>
+                    </div>
+                    <div class="metric-row">
                         <div class="card-value" id="thanosRam">0 GB</div>
                         <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: (Series * 4KB) + (QPS Overhead)</span>
@@ -185,11 +190,6 @@
                         <div class="card-value" id="thanosDisk">0 GB</div>
                         <div class="card-detail">PVC (Per Replica)</div>
                         <span class="formula-text">Form: WAL + Local TSDB Blocks</span>
-                    </div>
-                    <div class="metric-row">
-                        <div class="card-value" id="thanosCpu">0 vCPU</div>
-                        <div class="card-detail">CPU (Per Replica)</div>
-                        <span class="formula-text">Form: Ingestion + Query Load * Perf</span>
                     </div>
                 </div>
 
@@ -202,9 +202,9 @@
                         <span class="formula-text">Singleton (Vertical Scaling)</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="compactDisk">0 GB</div>
-                        <div class="card-detail">Scratch Disk PVC</div>
-                        <span class="formula-text">Safety: 3 * (Max 2w Block)</span>
+                        <div class="card-value" id="compactCpu">1</div>
+                        <div class="card-detail">CPU (Singleton)</div>
+                        <span class="formula-text">Form: 1 Core (Vertical)</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="compactRam">0 GB</div>
@@ -212,9 +212,9 @@
                         <span class="formula-text">Form: 2GB Base -> Scale up</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="compactCpu">1 vCPU</div>
-                        <div class="card-detail">CPU (Singleton)</div>
-                        <span class="formula-text">Form: 1 Core (Vertical)</span>
+                        <div class="card-value" id="compactDisk">0 GB</div>
+                        <div class="card-detail">Scratch Disk PVC</div>
+                        <span class="formula-text">Safety: 3 * (Max 2w Block)</span>
                     </div>
                 </div>
 
@@ -227,14 +227,14 @@
                         <span class="formula-text">Form: Static 1 (For Now)</span>
                     </div>
                     <div class="metric-row">
+                        <div class="card-value" id="storeCpu">0</div>
+                        <div class="card-detail">CPU (Per Replica)</div>
+                        <span class="formula-text">Form: ((Series/1.5M) + (QPS/15)) * Perf</span>
+                    </div>
+                    <div class="metric-row">
                         <div class="card-value" id="storeRam">0 GB</div>
                         <div class="card-detail">RAM (Per Replica)</div>
                         <span class="formula-text">Form: (S3 * 0.2%) + (QPS * Complexity)</span>
-                    </div>
-                    <div class="metric-row">
-                        <div class="card-value" id="storeCpu">0 vCPU</div>
-                        <div class="card-detail">CPU (Per Replica)</div>
-                        <span class="formula-text">Form: ((Series/1.5M) + (QPS/15)) * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="storePvc">0 GB</div>
@@ -266,7 +266,7 @@
                         <span class="formula-text">Form: Base 1 + (QPS / 50)</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="frontendCpuVal">1 vCPU</div>
+                        <div class="card-value" id="frontendCpuVal">1</div>
                         <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: (Replicas * 1 Core) * Perf</span>
                     </div>
@@ -286,7 +286,7 @@
                         <span class="formula-text">Form: Base 1 + (QPS / 20)</span>
                     </div>
                     <div class="metric-row">
-                        <div class="card-value" id="querierCpuVal">2 vCPU</div>
+                        <div class="card-value" id="querierCpuVal">2</div>
                         <div class="card-detail">CPU (Per Replica)</div>
                         <span class="formula-text">Form: (Replicas * 2 Core) * Perf</span>
                     </div>

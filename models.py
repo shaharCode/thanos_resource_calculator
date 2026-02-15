@@ -2,10 +2,11 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 RESOURCE_PATTERN = "^[0-9]+[KMG]i$"
+CPU_PATTERN = "^([0-9]+)m?$"
 
 class BasicResources(BaseModel):
     memory: str = Field(..., description="Memory in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
-    cpu: int = Field(..., description="CPU in ints", gt=0)
+    cpu: str = Field(..., description="CPU in cores or millicores (e.g. '1', '500m')", pattern=CPU_PATTERN)
     ephemeralStorage: Optional[str] = Field(default=None, description="Ephemeral storage in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
 
 class Resources(BaseModel):
@@ -24,12 +25,12 @@ class CollectorResources(Resources):
             "example": {
                 "requests": {
                     "memory": "512Mi",
-                    "cpu": 1,
+                    "cpu": "1",
                     "ephemeralStorage": "512Mi"
                 },
                 "limits": {
                     "memory": "1Gi",
-                    "cpu": 1,
+                    "cpu": "1",
                     "ephemeralStorage": "1Gi"
                 },
                 "replicas": 1,
@@ -50,35 +51,35 @@ class PoolResources(BaseModel):
         json_schema_extra = {
             "example": {
                 "router": {
-                    "requests": {"memory": "1Gi", "cpu": 1},
-                    "limits": {"memory": "2Gi", "cpu": 2},
+                    "requests": {"memory": "1Gi", "cpu": "1"},
+                    "limits": {"memory": "2Gi", "cpu": "2"},
                     "replicas": 2
                 },
                 "query": {
-                    "requests": {"memory": "1Gi", "cpu": 1},
-                    "limits": {"memory": "2Gi", "cpu": 2},
+                    "requests": {"memory": "1Gi", "cpu": "1"},
+                    "limits": {"memory": "2Gi", "cpu": "2"},
                     "replicas": 2
                 },
                 "query_frontend": {
-                    "requests": {"memory": "1Gi", "cpu": 1},
-                    "limits": {"memory": "1Gi", "cpu": 1},
+                    "requests": {"memory": "1Gi", "cpu": "1"},
+                    "limits": {"memory": "1Gi", "cpu": "1"},
                     "replicas": 2
                 },
                 "receiver": {
-                    "requests": {"memory": "2Gi", "cpu": 2},
-                    "limits": {"memory": "4Gi", "cpu": 4},
+                    "requests": {"memory": "2Gi", "cpu": "2"},
+                    "limits": {"memory": "4Gi", "cpu": "4"},
                     "replicas": 3,
                     "storage": "50Gi"
                 },
                 "store": {
-                    "requests": {"memory": "2Gi", "cpu": 1},
-                    "limits": {"memory": "4Gi", "cpu": 2},
+                    "requests": {"memory": "2Gi", "cpu": "1"},
+                    "limits": {"memory": "4Gi", "cpu": "2"},
                     "replicas": 1,
                     "storage": "100Gi"
                 },
                 "compactor": {
-                    "requests": {"memory": "4Gi", "cpu": 2},
-                    "limits": {"memory": "8Gi", "cpu": 4},
+                    "requests": {"memory": "4Gi", "cpu": "2"},
+                    "limits": {"memory": "8Gi", "cpu": "4"},
                     "replicas": 1,
                     "storage": "200Gi"
                 },

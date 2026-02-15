@@ -108,11 +108,23 @@ async function calculate() {
         const dataPool = await resPool.json();
 
         // Helper to normalize data: map 'storage' -> 'pvc', 'ephemeralStorage' -> 'pvc'
+        // Helper to parse CPU string ("1", "500m") to float
+        const parseCpu = (cpuStr) => {
+            if (!cpuStr) return 0;
+            if (typeof cpuStr === 'number') return cpuStr; // already number
+            if (cpuStr.endsWith('m')) {
+                return parseFloat(cpuStr) / 1000;
+            }
+            return parseFloat(cpuStr);
+        };
+
+        // Helper to normalize data: map 'storage' -> 'pvc', 'ephemeralStorage' -> 'pvc'
         const normalize = (comp) => {
-            if (!comp) return { replicas: 0, requests: { memory: "0Gi", cpu: 0 }, limits: { memory: "0Gi", cpu: 0 }, pvc: "0Gi", cpu: 0, ram: "0Gi" };
+            if (!comp) return { replicas: 0, requests: { memory: "0Gi", cpu: "0" }, limits: { memory: "0Gi", cpu: "0" }, pvc: "0Gi", cpu: 0, ram: "0Gi" };
             return {
                 replicas: comp.replicas,
-                cpu: comp.requests.cpu,
+                cpu: comp.requests.cpu, // keep as string for display
+                cpuVal: parseCpu(comp.requests.cpu), // parsed value for totals
                 ram: comp.requests.memory,
                 pvc: comp.storage || comp.requests.ephemeralStorage || "0Gi"
             };
@@ -161,13 +173,13 @@ async function calculate() {
         const totalPods = r.otel.replicas + r.router.replicas + r.ingestor.replicas + r.compactor.replicas + r.store.replicas + r.frontend.replicas + r.querier.replicas;
 
         // Summing (CPU * Replicas) 
-        const totalCpu = (r.otel.cpu * r.otel.replicas) +
-            (r.router.cpu * r.router.replicas) +
-            (r.ingestor.cpu * r.ingestor.replicas) +
-            (r.compactor.cpu * r.compactor.replicas) +
-            (r.store.cpu * r.store.replicas) +
-            (r.frontend.cpu * r.frontend.replicas) +
-            (r.querier.cpu * r.querier.replicas);
+        const totalCpu = (r.otel.cpuVal * r.otel.replicas) +
+            (r.router.cpuVal * r.router.replicas) +
+            (r.ingestor.cpuVal * r.ingestor.replicas) +
+            (r.compactor.cpuVal * r.compactor.replicas) +
+            (r.store.cpuVal * r.store.replicas) +
+            (r.frontend.cpuVal * r.frontend.replicas) +
+            (r.querier.cpuVal * r.querier.replicas);
 
         // Sum Ram
         const totalRamBytes = (parseBytes(r.otel.ram) * r.otel.replicas) +
@@ -197,19 +209,19 @@ async function calculate() {
         // Update UI Elements
         // OTel
         document.getElementById('otelReplicas').innerText = r.otel.replicas + " Replicas";
-        document.getElementById('otelCpu').innerText = (r.otel.cpu < 1 ? 1 : r.otel.cpu) + " vCPU";
+        document.getElementById('otelCpu').innerText = r.otel.cpu + " CPU";
         document.getElementById('otelRam').innerText = r.otel.ram;
 
         // Router
         document.getElementById('routerReplicas').innerText = r.router.replicas + " Replicas";
-        document.getElementById('routerCpu').innerHTML = `${r.router.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('routerCpu').innerHTML = `${r.router.cpu} CPU <span class="per-pod">/ Pod</span>`;
         document.getElementById('routerRam').innerHTML = `${r.router.ram} <span class="per-pod">/ Pod</span>`;
 
         // Ingestor
         document.getElementById('ingestorShards').innerText = r.ingestor.replicas + " Pods";
         document.getElementById('thanosRam').innerHTML = `${r.ingestor.ram} <span class="per-pod">/ Pod</span>`;
         document.getElementById('thanosDisk').innerHTML = `${r.ingestor.pvc} <span class="per-pod">/ Pod</span>`;
-        document.getElementById('thanosCpu').innerHTML = `${r.ingestor.cpu.toFixed(1)} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('thanosCpu').innerHTML = `${r.ingestor.cpu} CPU <span class="per-pod">/ Pod</span>`;
 
         // S3
         document.getElementById('s3Storage').innerText = r.S3Size;
@@ -218,22 +230,22 @@ async function calculate() {
         document.getElementById('compactReplicas').innerText = r.compactor.replicas + " Replicas";
         document.getElementById('compactDisk').innerText = r.compactor.pvc;
         document.getElementById('compactRam').innerText = r.compactor.ram;
-        document.getElementById('compactCpu').innerText = r.compactor.cpu + " vCPU";
+        document.getElementById('compactCpu').innerText = r.compactor.cpu + " CPU";
 
         // Store
         document.getElementById('storeReplicas').innerText = r.store.replicas + " Replicas";
         document.getElementById('storeRam').innerHTML = `${r.store.ram} <span class="per-pod">/ Pod</span>`;
-        document.getElementById('storeCpu').innerHTML = `${r.store.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('storeCpu').innerHTML = `${r.store.cpu} CPU <span class="per-pod">/ Pod</span>`;
         document.getElementById('storePvc').innerHTML = `${r.store.pvc} <span class="per-pod">Total</span>`;
 
         // Frontend
         document.getElementById('frontendReplicas').innerText = r.frontend.replicas + " Replicas";
-        document.getElementById('frontendCpuVal').innerHTML = `${r.frontend.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('frontendCpuVal').innerHTML = `${r.frontend.cpu} CPU <span class="per-pod">/ Pod</span>`;
         document.getElementById('frontendRamVal').innerHTML = `${r.frontend.ram} <span class="per-pod">/ Pod</span>`;
 
         // Querier
         document.getElementById('querierReplicas').innerText = r.querier.replicas + " Replicas";
-        document.getElementById('querierCpuVal').innerHTML = `${r.querier.cpu} vCPU <span class="per-pod">/ Pod</span>`;
+        document.getElementById('querierCpuVal').innerHTML = `${r.querier.cpu} CPU <span class="per-pod">/ Pod</span>`;
         document.getElementById('querierRamVal').innerHTML = `${r.querier.ram} <span class="per-pod">/ Pod</span>`;
 
         // Hide unused elements

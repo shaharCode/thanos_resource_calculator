@@ -43,11 +43,24 @@ def format_k8s_resource(bytes_val: float) -> str:
         val = math.ceil(bytes_val / (1024*1024*1024))
         return f"{val}Gi"
 
-def create_resources(cpu: int, memory_bytes: float, replicas: int) -> Resources:
-    safe_cpu = max(1, cpu)
+def format_cpu(cores: float) -> str:
+    """Formats CPU to '1' (if whole number) or '100m' (if fractional)."""
+    if cores <= 0.1:
+        return "100m" # fallback minimum
+    
+    # Handle int directly or float that is equivalent to int
+    if isinstance(cores, int) or cores.is_integer():
+        return str(int(cores))
+    
+    # Fractional - return in millicores
+    millicores = int(cores * 1000)
+    return f"{millicores}m"
+
+def create_resources(cpu: float, memory_bytes: float, replicas: int) -> Resources:
+    cpu_str = format_cpu(cpu)
     
     basic = BasicResources(
-        cpu=safe_cpu,
+        cpu=cpu_str,
         memory=format_k8s_resource(memory_bytes),
     )
     
@@ -57,11 +70,11 @@ def create_resources(cpu: int, memory_bytes: float, replicas: int) -> Resources:
         replicas=replicas
     )
 
-def create_resources_with_storage(cpu: int, memory_bytes: float, replicas: int, storage_bytes: float) -> ResourcesWithStorage:
-    safe_cpu = max(1, cpu)
+def create_resources_with_storage(cpu: float, memory_bytes: float, replicas: int, storage_bytes: float) -> ResourcesWithStorage:
+    cpu_str = format_cpu(cpu)
     
     basic = BasicResources(
-        cpu=safe_cpu,
+        cpu=cpu_str,
         memory=format_k8s_resource(memory_bytes),
     )
     
@@ -79,12 +92,11 @@ async def calculate_collector(req: CollectorRequest):
     dps = req.activeSeries / req.interval
     
     # OTel Logic
-    otel_cpu = math.ceil((dps / 20000) * req.perfFactor)
-    
-    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 1000) * 1024 * 1024 * 1024)
+    otel_cpu = (dps / 25000.0)
+    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 5000.0) * 1024 * 1024 * 1024)
     
     basic = BasicResources(
-        cpu=max(1, otel_cpu),
+        cpu=format_cpu(otel_cpu),
         memory=format_k8s_resource(otel_ram_bytes),
         ephemeralStorage=DEFAULT_EPHEMERAL_STORAGE
     )
@@ -112,7 +124,7 @@ async def calculate_pool(req: PoolRequest):
     if router_replicas < 2:
         router_replicas = 2
     
-    router_cpu_per_pod = math.ceil(1 * perf_factor)
+    router_cpu_per_pod = 1 * perf_factor
     router_ram_per_pod_bytes = 2 * 1024 * 1024 * 1024 # 2 GiB assumption
     
     router_res = create_resources(router_cpu_per_pod, router_ram_per_pod_bytes, router_replicas)
@@ -136,8 +148,8 @@ async def calculate_pool(req: PoolRequest):
 
     receive_ingest_cpu = dps / 15000
     receive_query_cpu = qps / 5
-    receive_cpu_total = math.ceil((receive_ingest_cpu + receive_query_cpu) * perf_factor)
-    receive_cpu_per_pod = math.ceil(receive_cpu_total / ingestor_shards)
+    receive_cpu_total = (receive_ingest_cpu + receive_query_cpu) * perf_factor
+    receive_cpu_per_pod = receive_cpu_total / ingestor_shards
     
     receiver_res = create_resources_with_storage(receive_cpu_per_pod, ingestor_ram_per_pod, ingestor_shards, receiver_disk_per_pod)
 
@@ -167,10 +179,10 @@ async def calculate_pool(req: PoolRequest):
     series_in_thousands = max(10, active_series / 1000)
     compactor_ram_gb = 2 + (math.log10(series_in_thousands) * 5)
     compactor_cpu = 2 + (math.log10(series_in_thousands) * 1.2)
-    compactor_cpu = max(2, min(8, math.ceil(compactor_cpu)))
+    compactor_cpu = max(0.1, min(8.0, compactor_cpu))
     compactor_ram_bytes = compactor_ram_gb * 1024 * 1024 * 1024
     
-    compactor_res = create_resources_with_storage(int(compactor_cpu), compactor_ram_bytes, 1, compactor_scratch_bytes)
+    compactor_res = create_resources_with_storage(compactor_cpu, compactor_ram_bytes, 1, compactor_scratch_bytes)
 
     # --- Store ---
     store_cache_bytes = (total_s3_bytes * 0.002) + (2 * 1024 * 1024 * 1024)
@@ -178,15 +190,15 @@ async def calculate_pool(req: PoolRequest):
     store_ram_total = store_cache_bytes + store_query_overhead
     
     base_store_cpu = (active_series / 1500000) + (qps / 15)
-    store_cpu = math.ceil(base_store_cpu * perf_factor)
-    store_cpu = max(1, store_cpu)
+    store_cpu = base_store_cpu * perf_factor
+    store_cpu = max(0.1, store_cpu)
     
     store_replicas = 1
     
     store_ram_per_pod = store_ram_total / store_replicas
     store_pvc_per_replica = total_s3_bytes * 0.10
     
-    store_res = create_resources_with_storage(int(store_cpu), store_ram_per_pod, store_replicas, store_pvc_per_replica)
+    store_res = create_resources_with_storage(store_cpu, store_ram_per_pod, store_replicas, store_pvc_per_replica)
 
     # --- Frontend ---
     base_cpu_per_pod = 1 + (active_series / 1500000)
@@ -194,18 +206,18 @@ async def calculate_pool(req: PoolRequest):
     
     frontend_replicas = max(1, math.ceil(qps / 25))
     
-    frontend_cpu_per_pod = math.ceil(base_cpu_per_pod * perf_factor)
+    frontend_cpu_per_pod = base_cpu_per_pod * perf_factor
     frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor
     
-    frontend_res = create_resources(int(frontend_cpu_per_pod), frontend_ram_per_pod, frontend_replicas)
+    frontend_res = create_resources(frontend_cpu_per_pod, frontend_ram_per_pod, frontend_replicas)
 
     # --- Querier ---
     querier_replicas = 1 + math.floor(qps / 20)
-    querier_cpu_total = math.ceil((querier_replicas * 2.5) * perf_factor)
+    querier_cpu_total = (querier_replicas * 2.5) * perf_factor
     querier_ram_bytes_total = ((active_series / 100000) * 1024 * 1024 * 1024) + (qps * complexity_bytes * perf_factor)
     
     querier_ram_per_pod = querier_ram_bytes_total / querier_replicas
-    querier_cpu_per_pod = math.ceil(querier_cpu_total / querier_replicas)
+    querier_cpu_per_pod = querier_cpu_total / querier_replicas
     
     querier_res = create_resources(querier_cpu_per_pod, querier_ram_per_pod, querier_replicas)
 
