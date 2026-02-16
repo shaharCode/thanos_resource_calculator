@@ -135,8 +135,8 @@ async function calculate() {
             S3Size: dataPool.s3,
 
             otel: normalize(dataCollector),
-            router: normalize(dataPool.router),
-            ingestor: normalize(dataPool.receiver),
+            router: normalize(dataPool.receiver_router),
+            ingestor: normalize(dataPool.receiver_ingestor),
             compactor: normalize(dataPool.compactor),
             store: normalize(dataPool.store),
             frontend: normalize(dataPool.query_frontend),

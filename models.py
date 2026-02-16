@@ -39,10 +39,10 @@ class CollectorResources(Resources):
         }
 
 class PoolResources(BaseModel):
-    router: Resources
+    receiver_router: Resources
     query: Resources
     query_frontend: Resources
-    receiver: ResourcesWithStorage
+    receiver_ingestor: ResourcesWithStorage
     store: ResourcesWithStorage
     compactor: Optional[ResourcesWithStorage]
     s3: str = Field(..., description="S3 size in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
@@ -50,7 +50,7 @@ class PoolResources(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "router": {
+                "receiver_router": {
                     "requests": {"memory": "1Gi", "cpu": "1"},
                     "limits": {"memory": "2Gi", "cpu": "2"},
                     "replicas": 2
@@ -65,7 +65,7 @@ class PoolResources(BaseModel):
                     "limits": {"memory": "1Gi", "cpu": "1"},
                     "replicas": 2
                 },
-                "receiver": {
+                "receiver_ingestor": {
                     "requests": {"memory": "2Gi", "cpu": "2"},
                     "limits": {"memory": "4Gi", "cpu": "4"},
                     "replicas": 3,
@@ -88,18 +88,15 @@ class PoolResources(BaseModel):
         }
 
 class CollectorRequest(BaseModel):
-    activeSeries: int = Field(..., description="Number of active series", gt=0)
-    interval: int = Field(..., description="Scrape interval in seconds", gt=0)
-    perfFactor: float = Field(..., description="Performance factor (1.0-2.0)", ge=1.0, le=2.0)
+    dps: float = Field(..., description="Data points per second", gt=0)
 
     class Config:
         json_schema_extra = {
             "example": {
-                "activeSeries": 100000,
-                "interval": 60,
-                "perfFactor": 1.3
+                "dps": 1667
             }
         }
+
 
 class PoolRequest(BaseModel):
     activeSeries: int = Field(..., description="Number of active series", gt=0)

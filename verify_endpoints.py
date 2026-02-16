@@ -7,9 +7,7 @@ client = TestClient(app)
 def test_collector():
     print("Testing Collector Endpoint...")
     payload = {
-        "activeSeries": 100000,
-        "interval": 60,
-        "perfFactor": 1.3
+        "dps": 1667
     }
     response = client.post("/api/calculate/collector_resources", json=payload)
     if response.status_code == 200:

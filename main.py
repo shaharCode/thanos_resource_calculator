@@ -56,57 +56,132 @@ def format_cpu(cores: float) -> str:
     millicores = int(cores * 1000)
     return f"{millicores}m"
 
-def create_resources(cpu: float, memory_bytes: float, replicas: int) -> Resources:
-    cpu_str = format_cpu(cpu)
+def calculate_limit_multiplier(base_multiplier: float, resource_value: float, 
+                                resource_type: str) -> float:
+    """
+    Adjusts buffer multiplier based on resource scale.
+    - Very low resources: add minimum absolute buffer
+    - Very high resources: reduce percentage buffer (diminishing returns)
+    """
+    if resource_type == "cpu":
+        # For very low CPU (<0.5 cores), ensure at least +0.3 cores buffer
+        if resource_value < 0.5:
+            min_buffer = 0.3
+            percentage_buffer = resource_value * (base_multiplier - 1.0)
+            actual_buffer = max(percentage_buffer, min_buffer)
+            return 1.0 + (actual_buffer / resource_value)
     
-    basic = BasicResources(
-        cpu=cpu_str,
-        memory=format_k8s_resource(memory_bytes),
+    elif resource_type == "memory":
+        memory_gb = resource_value / (1024 ** 3)
+        
+        # For very low memory (<2Gi), ensure at least +1Gi buffer
+        if memory_gb < 2:
+            min_buffer_bytes = 1 * 1024 ** 3
+            percentage_buffer = resource_value * (base_multiplier - 1.0)
+            actual_buffer = max(percentage_buffer, min_buffer_bytes)
+            return 1.0 + (actual_buffer / resource_value)
+        
+        # For very high memory (>100Gi), use diminishing buffer percentages
+        elif memory_gb > 100:
+            # Reduce multiplier: 1.4x → 1.28x for >100Gi
+            reduced_multiplier = 1.0 + ((base_multiplier - 1.0) * 0.7)
+            return reduced_multiplier
+    
+    return base_multiplier
+
+
+def create_resources(cpu: float, memory_bytes: float, replicas: int,
+                     cpu_limit_multiplier: float = 1.0,
+                     memory_limit_multiplier: float = 1.0) -> Resources:
+    cpu_str = format_cpu(cpu)
+    memory_str = format_k8s_resource(memory_bytes)
+    
+    # Apply edge case adjustments
+    adjusted_cpu_mult = calculate_limit_multiplier(cpu_limit_multiplier, cpu, "cpu")
+    adjusted_mem_mult = calculate_limit_multiplier(memory_limit_multiplier, memory_bytes, "memory")
+    
+    # Calculate limit values
+    cpu_limit = cpu * adjusted_cpu_mult
+    memory_limit = memory_bytes * adjusted_mem_mult
+    
+    # Validation: ensure limits >= requests
+    assert cpu_limit >= cpu, f"CPU limit ({cpu_limit}) must be >= request ({cpu})"
+    assert memory_limit >= memory_bytes, f"Memory limit ({memory_limit}) must be >= request ({memory_bytes})"
+    
+    requests = BasicResources(cpu=cpu_str, memory=memory_str)
+    limits = BasicResources(
+        cpu=format_cpu(cpu_limit),
+        memory=format_k8s_resource(memory_limit)
     )
     
     return Resources(
-        requests=basic,
-        limits=basic,
+        requests=requests,
+        limits=limits,
         replicas=replicas
     )
 
-def create_resources_with_storage(cpu: float, memory_bytes: float, replicas: int, storage_bytes: float) -> ResourcesWithStorage:
+
+def create_resources_with_storage(cpu: float, memory_bytes: float, replicas: int, storage_bytes: float,
+                                  cpu_limit_multiplier: float = 1.0,
+                                  memory_limit_multiplier: float = 1.0) -> ResourcesWithStorage:
     cpu_str = format_cpu(cpu)
+    memory_str = format_k8s_resource(memory_bytes)
     
-    basic = BasicResources(
-        cpu=cpu_str,
-        memory=format_k8s_resource(memory_bytes),
+    # Apply edge case adjustments
+    adjusted_cpu_mult = calculate_limit_multiplier(cpu_limit_multiplier, cpu, "cpu")
+    adjusted_mem_mult = calculate_limit_multiplier(memory_limit_multiplier, memory_bytes, "memory")
+    
+    # Calculate limit values
+    cpu_limit = cpu * adjusted_cpu_mult
+    memory_limit = memory_bytes * adjusted_mem_mult
+    
+    # Validation: ensure limits >= requests
+    assert cpu_limit >= cpu, f"CPU limit ({cpu_limit}) must be >= request ({cpu})"
+    assert memory_limit >= memory_bytes, f"Memory limit ({memory_limit}) must be >= request ({memory_bytes})"
+    
+    requests = BasicResources(cpu=cpu_str, memory=memory_str)
+    limits = BasicResources(
+        cpu=format_cpu(cpu_limit),
+        memory=format_k8s_resource(memory_limit)
     )
     
     storage_str = format_k8s_resource(storage_bytes)
 
     return ResourcesWithStorage(
-        requests=basic,
-        limits=basic,
+        requests=requests,
+        limits=limits,
         replicas=replicas,
         storage=storage_str
     )
 
+
 @app.post("/api/calculate/collector_resources", response_model=CollectorResources)
 async def calculate_collector(req: CollectorRequest):
-    dps = req.activeSeries / req.interval
+    dps = req.dps
     
     # OTel Logic
     otel_cpu = (dps / 25000.0)
     otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 5000.0) * 1024 * 1024 * 1024)
     
-    basic = BasicResources(
-        cpu=format_cpu(otel_cpu),
-        memory=format_k8s_resource(otel_ram_bytes),
-        ephemeralStorage=DEFAULT_EPHEMERAL_STORAGE
+    otel_resources = create_resources(
+        otel_cpu, 
+        otel_ram_bytes, 
+        1,
+        cpu_limit_multiplier=1.2,
+        memory_limit_multiplier=1.3
     )
     
+    # Add ephemeral storage to requests and limits
+    otel_resources.requests.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE
+    otel_resources.limits.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE
+    
     return CollectorResources(
-        requests=basic,
-        limits=basic,
-        replicas=1, 
+        requests=otel_resources.requests,
+        limits=otel_resources.limits,
+        replicas=1,
         dps=math.ceil(dps)
     )
+
 
 @app.post("/api/calculate/pool_resources", response_model=PoolResources, response_model_exclude_none=True)
 async def calculate_pool(req: PoolRequest):
@@ -127,7 +202,13 @@ async def calculate_pool(req: PoolRequest):
     router_cpu_per_pod = 1 * perf_factor
     router_ram_per_pod_bytes = 2 * 1024 * 1024 * 1024 # 2 GiB assumption
     
-    router_res = create_resources(router_cpu_per_pod, router_ram_per_pod_bytes, router_replicas)
+    router_res = create_resources(
+        router_cpu_per_pod, 
+        router_ram_per_pod_bytes, 
+        router_replicas,
+        cpu_limit_multiplier=1.1,
+        memory_limit_multiplier=1.15
+    )
 
     # --- Ingestor / Receiver ---
     max_series_per_pod = 4000000
@@ -151,7 +232,14 @@ async def calculate_pool(req: PoolRequest):
     receive_cpu_total = (receive_ingest_cpu + receive_query_cpu) * perf_factor
     receive_cpu_per_pod = receive_cpu_total / ingestor_shards
     
-    receiver_res = create_resources_with_storage(receive_cpu_per_pod, ingestor_ram_per_pod, ingestor_shards, receiver_disk_per_pod)
+    ingestor_res = create_resources_with_storage(
+        receive_cpu_per_pod, 
+        ingestor_ram_per_pod, 
+        ingestor_shards, 
+        receiver_disk_per_pod,
+        cpu_limit_multiplier=1.2,
+        memory_limit_multiplier=1.4
+    )
 
     # --- S3 Storage ---
     if active_series < 200000:
@@ -182,7 +270,14 @@ async def calculate_pool(req: PoolRequest):
     compactor_cpu = max(0.1, min(8.0, compactor_cpu))
     compactor_ram_bytes = compactor_ram_gb * 1024 * 1024 * 1024
     
-    compactor_res = create_resources_with_storage(compactor_cpu, compactor_ram_bytes, 1, compactor_scratch_bytes)
+    compactor_res = create_resources_with_storage(
+        compactor_cpu, 
+        compactor_ram_bytes, 
+        1, 
+        compactor_scratch_bytes,
+        cpu_limit_multiplier=1.3,
+        memory_limit_multiplier=1.5
+    )
 
     # --- Store ---
     store_cache_bytes = (total_s3_bytes * 0.002) + (2 * 1024 * 1024 * 1024)
@@ -198,7 +293,14 @@ async def calculate_pool(req: PoolRequest):
     store_ram_per_pod = store_ram_total / store_replicas
     store_pvc_per_replica = total_s3_bytes * 0.10
     
-    store_res = create_resources_with_storage(store_cpu, store_ram_per_pod, store_replicas, store_pvc_per_replica)
+    store_res = create_resources_with_storage(
+        store_cpu, 
+        store_ram_per_pod, 
+        store_replicas, 
+        store_pvc_per_replica,
+        cpu_limit_multiplier=1.2,
+        memory_limit_multiplier=1.35
+    )
 
     # --- Frontend ---
     base_cpu_per_pod = 1 + (active_series / 1500000)
@@ -209,7 +311,13 @@ async def calculate_pool(req: PoolRequest):
     frontend_cpu_per_pod = base_cpu_per_pod * perf_factor
     frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor
     
-    frontend_res = create_resources(frontend_cpu_per_pod, frontend_ram_per_pod, frontend_replicas)
+    frontend_res = create_resources(
+        frontend_cpu_per_pod, 
+        frontend_ram_per_pod, 
+        frontend_replicas,
+        cpu_limit_multiplier=1.1,
+        memory_limit_multiplier=1.2
+    )
 
     # --- Querier ---
     querier_replicas = 1 + math.floor(qps / 20)
@@ -219,13 +327,19 @@ async def calculate_pool(req: PoolRequest):
     querier_ram_per_pod = querier_ram_bytes_total / querier_replicas
     querier_cpu_per_pod = querier_cpu_total / querier_replicas
     
-    querier_res = create_resources(querier_cpu_per_pod, querier_ram_per_pod, querier_replicas)
+    querier_res = create_resources(
+        querier_cpu_per_pod, 
+        querier_ram_per_pod, 
+        querier_replicas,
+        cpu_limit_multiplier=1.2,
+        memory_limit_multiplier=1.4
+    )
 
     return PoolResources(
-        router=router_res,
+        receiver_router=router_res,
         query=querier_res,
         query_frontend=frontend_res,
-        receiver=receiver_res,
+        receiver_ingestor=ingestor_res,
         store=store_res,
         compactor=compactor_res,
         s3=format_k8s_resource(total_s3_bytes)
