@@ -68,15 +68,17 @@ function setMode(mode) {
 
 async function calculate() {
     try {
+        const activeSeries = parseInt(document.getElementById('activeSeries').value) || 0;
+        const interval = parseInt(document.getElementById('interval').value) || 60;
+        const dps = activeSeries / interval;
+
         const payloadCollector = {
-            activeSeries: parseInt(document.getElementById('activeSeries').value) || 0,
-            interval: parseInt(document.getElementById('interval').value) || 1,
-            perfFactor: parseFloat(document.getElementById('perfMode').value) || 1.3
+            dps: dps
         };
 
         const payloadPool = {
-            activeSeries: parseInt(document.getElementById('activeSeries').value) || 0,
-            interval: parseInt(document.getElementById('interval').value) || 1,
+            activeSeries: activeSeries,
+            interval: interval,
             qps: parseInt(document.getElementById('qps').value) || 0,
             perfFactor: parseFloat(document.getElementById('perfMode').value) || 1.3,
             queryComplexity: parseInt(document.getElementById('queryComplexity').value) || 268435456,

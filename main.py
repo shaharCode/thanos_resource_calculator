@@ -195,68 +195,87 @@ async def calculate_pool(req: PoolRequest):
     dps = active_series / interval
 
     # --- Router ---
-    router_replicas = math.ceil(dps / 30000)
-    if router_replicas < 2:
-        router_replicas = 2
-    
-    router_cpu_per_pod = 1 * perf_factor
-    router_ram_per_pod_bytes = 2 * 1024 * 1024 * 1024 # 2 GiB assumption
-    
+    CPU_PER_DPS = 1 / 25000      # cores per DPS
+    RAM_PER_POD = 2 * 1024 * 1024 * 1024
+    MIN_REPLICAS = 2
+
+    total_cpu = dps * CPU_PER_DPS
+
+    replicas = math.ceil(total_cpu)
+
+    if replicas < MIN_REPLICAS:
+        replicas = MIN_REPLICAS
+
+    cpu_per_pod = total_cpu / replicas
+
     router_res = create_resources(
-        router_cpu_per_pod, 
-        router_ram_per_pod_bytes, 
-        router_replicas,
-        cpu_limit_multiplier=1.1,
+        cpu_per_pod, 
+        RAM_PER_POD, 
+        replicas,
+        cpu_limit_multiplier=1.3,
         memory_limit_multiplier=1.15
     )
 
-    # --- Ingestor / Receiver ---
-    max_series_per_pod = 4000000
-    ingestor_shards = max(1, math.ceil(active_series / max_series_per_pod))
-
-    receive_query_ram_overhead = qps * complexity_bytes
-    thanos_ram_bytes_total = (active_series * 6144 * 2) + receive_query_ram_overhead
-    ingestor_ram_per_pod = thanos_ram_bytes_total / ingestor_shards
-
-    wal_bytes = dps * 7200 * 3 * 6
-    local_tsdb_bytes = 0
-    if req.retLocalHours > 2:
-        retention_seconds = (req.retLocalHours - 2) * 3600
-        local_tsdb_bytes = dps * retention_seconds * 6
+    # --- Receiver Ingestor ---
+    SCRAPE_INTERVAL = 30
+    BYTES_PER_SERIES = 12 * 1024
+    HEAD_HOURS = 2
+    RETENTION_HOURS = 6
+    CPU_PER_DPS_INGEST = 1 / 12000.0
+    MAX_SERIES_PER_REPLICA = 4000000
+    MIN_PVC_BYTES = 5 * 1024**3
     
-    total_receiver_disk = wal_bytes + local_tsdb_bytes
-    receiver_disk_per_pod = total_receiver_disk / ingestor_shards
+    ingestor_cpu = dps * CPU_PER_DPS_INGEST
+    query_cpu = ingestor_cpu * 0.2
+    ingestor_cpu += query_cpu
 
-    receive_ingest_cpu = dps / 15000
-    receive_query_cpu = qps / 5
-    receive_cpu_total = (receive_ingest_cpu + receive_query_cpu) * perf_factor
-    receive_cpu_per_pod = receive_cpu_total / ingestor_shards
-    
+    active_series = dps * SCRAPE_INTERVAL
+    ingestor_memory = active_series * BYTES_PER_SERIES
+    query_memory = ingestor_memory * 0.75
+    ingestor_memory += query_memory
+
+    ingestor_wal_bytes = dps * 7200 * 30
+    ingestor_block_bytes = dps * (RETENTION_HOURS - HEAD_HOURS) * 3600 * 2
+    ingestor_disk_bytes = (ingestor_wal_bytes + ingestor_block_bytes) * 1.2
+    ingestor_disk_bytes = max(ingestor_disk_bytes, MIN_PVC_BYTES)
+
+    ingestor_replicas = math.ceil(active_series / MAX_SERIES_PER_REPLICA)
+
     ingestor_res = create_resources_with_storage(
-        receive_cpu_per_pod, 
-        ingestor_ram_per_pod, 
-        ingestor_shards, 
-        receiver_disk_per_pod,
-        cpu_limit_multiplier=1.2,
+        ingestor_cpu, 
+        ingestor_memory, 
+        ingestor_replicas, 
+        ingestor_disk_bytes,
+        cpu_limit_multiplier=1.25,
         memory_limit_multiplier=1.4
     )
 
     # --- S3 Storage ---
+    active_series = dps * SCRAPE_INTERVAL
+    retention_days = req.ret1hDays #req.retentionDays
+
+    # --- Retention mapping ---
+    ret_raw_days = min(30, retention_days)
+    ret_5m_days = ret_raw_days + max(0, (retention_days - ret_raw_days)/2)
+    ret_1h_days = retention_days
+
     if active_series < 200000:
         scale_multiplier = 1.0
     else:
         scale_factor = min(1.0, (active_series - 200000) / 1800000)
         scale_multiplier = (0.52 / 0.868) - (scale_factor * 0.07 / 0.868)
-    
-    scale_multiplier *= 1.10
 
-    raw_bytes_per_series_per_day = 38_000 * scale_multiplier
-    downsample_5m_per_series_per_day = 3_000 * scale_multiplier
+    samples_per_day = 86400 / SCRAPE_INTERVAL
+    bytes_per_sample = 6
+
+    raw_bytes_per_series_per_day = samples_per_day * bytes_per_sample * scale_multiplier
+    downsample_5m_per_series_per_day = 3000 * scale_multiplier
     downsample_1h_per_series_per_day = 300 * scale_multiplier
-    
-    s3_raw_bytes = active_series * raw_bytes_per_series_per_day * req.retRawDays
-    s3_5m_bytes = active_series * downsample_5m_per_series_per_day * req.ret5mDays
-    s3_1h_bytes = active_series * downsample_1h_per_series_per_day * req.ret1hDays
+
+    s3_raw_bytes = active_series * raw_bytes_per_series_per_day * ret_raw_days
+    s3_5m_bytes = active_series * downsample_5m_per_series_per_day * ret_5m_days
+    s3_1h_bytes = active_series * downsample_1h_per_series_per_day * ret_1h_days
+
     total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
 
     # --- Compactor ---
