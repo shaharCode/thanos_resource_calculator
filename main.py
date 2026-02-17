@@ -64,7 +64,6 @@ def calculate_limit_multiplier(base_multiplier: float, resource_value: float,
     - Very high resources: reduce percentage buffer (diminishing returns)
     """
     if resource_type == "cpu":
-        # For very low CPU (<0.5 cores), ensure at least +0.3 cores buffer
         if resource_value < 0.5:
             min_buffer = 0.3
             percentage_buffer = resource_value * (base_multiplier - 1.0)
@@ -74,16 +73,13 @@ def calculate_limit_multiplier(base_multiplier: float, resource_value: float,
     elif resource_type == "memory":
         memory_gb = resource_value / (1024 ** 3)
         
-        # For very low memory (<2Gi), ensure at least +1Gi buffer
         if memory_gb < 2:
             min_buffer_bytes = 1 * 1024 ** 3
             percentage_buffer = resource_value * (base_multiplier - 1.0)
             actual_buffer = max(percentage_buffer, min_buffer_bytes)
             return 1.0 + (actual_buffer / resource_value)
         
-        # For very high memory (>100Gi), use diminishing buffer percentages
         elif memory_gb > 100:
-            # Reduce multiplier: 1.4x → 1.28x for >100Gi
             reduced_multiplier = 1.0 + ((base_multiplier - 1.0) * 0.7)
             return reduced_multiplier
     
@@ -93,6 +89,9 @@ def calculate_limit_multiplier(base_multiplier: float, resource_value: float,
 def create_resources(cpu: float, memory_bytes: float, replicas: int,
                      cpu_limit_multiplier: float = 1.0,
                      memory_limit_multiplier: float = 1.0) -> Resources:
+    """
+    Creates a Resources object with calculated requests and limits.
+    """
     cpu_str = format_cpu(cpu)
     memory_str = format_k8s_resource(memory_bytes)
     
@@ -124,6 +123,9 @@ def create_resources(cpu: float, memory_bytes: float, replicas: int,
 def create_resources_with_storage(cpu: float, memory_bytes: float, replicas: int, storage_bytes: float,
                                   cpu_limit_multiplier: float = 1.0,
                                   memory_limit_multiplier: float = 1.0) -> ResourcesWithStorage:
+    """
+    Creates a ResourcesWithStorage object with calculated requests and limits.
+    """
     cpu_str = format_cpu(cpu)
     memory_str = format_k8s_resource(memory_bytes)
     
@@ -157,9 +159,14 @@ def create_resources_with_storage(cpu: float, memory_bytes: float, replicas: int
 
 @app.post("/api/calculate/collector_resources", response_model=CollectorResources)
 async def calculate_collector(req: CollectorRequest):
+    """
+    Calculates the resources required for the collector.
+    """
     dps = req.dps
     
     # OTel Logic
+    # Estimate OTel Collector resources from DPS using linear scaling:
+    # ~1 CPU per 25k samples/sec and ~1 GiB RAM per 5k samples/sec, plus a 512 MiB base footprint.
     otel_cpu = (dps / 25000.0)
     otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 5000.0) * 1024 * 1024 * 1024)
     
@@ -172,8 +179,7 @@ async def calculate_collector(req: CollectorRequest):
     )
     
     # Add ephemeral storage to requests and limits
-    otel_resources.requests.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE
-    otel_resources.limits.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE
+    otel_resources.requests.ephemeralStorage = otel_resources.limits.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE 
     
     return CollectorResources(
         requests=otel_resources.requests,
@@ -185,39 +191,47 @@ async def calculate_collector(req: CollectorRequest):
 
 @app.post("/api/calculate/pool_resources", response_model=PoolResources, response_model_exclude_none=True)
 async def calculate_pool(req: PoolRequest):
-    # Inputs
-    active_series = req.activeSeries
-    interval = req.interval if req.interval > 0 else 1
-    qps = req.qps
-    perf_factor = req.perfFactor
-    complexity_bytes = req.queryComplexity
+    """
+    Calculates the resources required for the pool.
+    """
+    # Constants
+    SCRAPE_INTERVAL = req.scrape_interval
+    DPS = req.dps
+    ACTIVE_TS = DPS * SCRAPE_INTERVAL
+    RETENTION = req.retention
+    RET_RAW_DAYS = min(30, RETENTION)
+    RET_5M_DAYS = RET_RAW_DAYS + max(0, (RETENTION - RET_RAW_DAYS)/2)
+    RET_1H_DAYS = RETENTION
     
-    dps = active_series / interval
-
     # --- Router ---
-    CPU_PER_DPS = 1 / 25000      # cores per DPS
-    RAM_PER_POD = 2 * 1024 * 1024 * 1024
-    MIN_REPLICAS = 2
+    # Estimate Router CPU as 1 core per 25k DPS
+    # scale replicas based on total CPU (min 2 for HA), and assign 2 GiB RAM per pod.
+    ROUTER_CPU_PER_DPS = 1 / 25000
+    ROUTER_MEMORY_PER_POD = 2 * 1024 * 1024 * 1024
+    ROUTER_MIN_REPLICAS = 2
 
-    total_cpu = dps * CPU_PER_DPS
+    total_cpu = DPS * ROUTER_CPU_PER_DPS
 
     replicas = math.ceil(total_cpu)
 
-    if replicas < MIN_REPLICAS:
-        replicas = MIN_REPLICAS
+    if replicas < ROUTER_MIN_REPLICAS:
+        replicas = ROUTER_MIN_REPLICAS
 
     cpu_per_pod = total_cpu / replicas
 
     router_res = create_resources(
         cpu_per_pod, 
-        RAM_PER_POD, 
+        ROUTER_MEMORY_PER_POD, 
         replicas,
         cpu_limit_multiplier=1.3,
         memory_limit_multiplier=1.15
     )
 
     # --- Receiver Ingestor ---
-    SCRAPE_INTERVAL = 30
+    # Receive ingestor sizing model: CPU scales with DPS (12k DPS/core + 20% query cost),
+    # memory scales with active series (~12 KiB/series + 75% query headroom),
+    # disk covers WAL (2h) + blocks (6h total retention), min 5 Gi PVC,
+    # and shard at 4M series per replica.
     BYTES_PER_SERIES = 12 * 1024
     HEAD_HOURS = 2
     RETENTION_HOURS = 6
@@ -225,21 +239,20 @@ async def calculate_pool(req: PoolRequest):
     MAX_SERIES_PER_REPLICA = 4000000
     MIN_PVC_BYTES = 5 * 1024**3
     
-    ingestor_cpu = dps * CPU_PER_DPS_INGEST
+    ingestor_cpu = DPS * CPU_PER_DPS_INGEST
     query_cpu = ingestor_cpu * 0.2
     ingestor_cpu += query_cpu
 
-    active_series = dps * SCRAPE_INTERVAL
-    ingestor_memory = active_series * BYTES_PER_SERIES
+    ingestor_memory = ACTIVE_TS * BYTES_PER_SERIES
     query_memory = ingestor_memory * 0.75
     ingestor_memory += query_memory
 
-    ingestor_wal_bytes = dps * 7200 * 30
-    ingestor_block_bytes = dps * (RETENTION_HOURS - HEAD_HOURS) * 3600 * 2
+    ingestor_wal_bytes = DPS * 7200 * 30
+    ingestor_block_bytes = DPS * (RETENTION_HOURS - HEAD_HOURS) * 3600 * 2
     ingestor_disk_bytes = (ingestor_wal_bytes + ingestor_block_bytes) * 1.2
     ingestor_disk_bytes = max(ingestor_disk_bytes, MIN_PVC_BYTES)
 
-    ingestor_replicas = math.ceil(active_series / MAX_SERIES_PER_REPLICA)
+    ingestor_replicas = math.ceil(ACTIVE_TS / MAX_SERIES_PER_REPLICA)
 
     ingestor_res = create_resources_with_storage(
         ingestor_cpu, 
@@ -251,19 +264,17 @@ async def calculate_pool(req: PoolRequest):
     )
 
     # --- S3 Storage ---
-    active_series = dps * SCRAPE_INTERVAL
-    retention_days = req.ret1hDays #req.retentionDays
+    # Model improved storage efficiency as cardinality grows:
+    # baseline below 200k series, then gradually reduce per-series storage cost
+    # (≈15% max gain by 2M series) due to better TSDB compression and index amortization.
 
-    # --- Retention mapping ---
-    ret_raw_days = min(30, retention_days)
-    ret_5m_days = ret_raw_days + max(0, (retention_days - ret_raw_days)/2)
-    ret_1h_days = retention_days
-
-    if active_series < 200000:
+    if ACTIVE_TS < 200000:
         scale_multiplier = 1.0
-    else:
-        scale_factor = min(1.0, (active_series - 200000) / 1800000)
-        scale_multiplier = (0.52 / 0.868) - (scale_factor * 0.07 / 0.868)
+    else: 
+        # Linearly scale efficiency from 200k → 2M active series
+        scale_factor = min(1.0, (ACTIVE_TS - 200000) / 1800000)
+        # Empirically derived storage efficiency scaling (from test environments)
+        scale_multiplier = 0.599 - (scale_factor * 0.0806)
 
     samples_per_day = 86400 / SCRAPE_INTERVAL
     bytes_per_sample = 6
@@ -272,18 +283,21 @@ async def calculate_pool(req: PoolRequest):
     downsample_5m_per_series_per_day = 3000 * scale_multiplier
     downsample_1h_per_series_per_day = 300 * scale_multiplier
 
-    s3_raw_bytes = active_series * raw_bytes_per_series_per_day * ret_raw_days
-    s3_5m_bytes = active_series * downsample_5m_per_series_per_day * ret_5m_days
-    s3_1h_bytes = active_series * downsample_1h_per_series_per_day * ret_1h_days
+    s3_raw_bytes = ACTIVE_TS * raw_bytes_per_series_per_day * RET_RAW_DAYS
+    s3_5m_bytes = ACTIVE_TS * downsample_5m_per_series_per_day * RET_5M_DAYS
+    s3_1h_bytes = ACTIVE_TS * downsample_1h_per_series_per_day * RET_1H_DAYS
 
     total_s3_bytes = s3_raw_bytes + s3_5m_bytes + s3_1h_bytes
 
     # --- Compactor ---
-    daily_gen_bytes = dps * 86400 * 1.5
-    max_block_days = min(req.retRawDays, 14)
-    compactor_scratch_bytes = daily_gen_bytes * max_block_days * 3
+    # Estimate Thanos Compactor resources: 
+    # scratch space = 2× largest 14-day block (28 days of daily generated bytes),
+    # RAM/CPU scale logarithmically with active series (min 10k),
+    # base 2GB/2CPU, capped at 8 CPU, to safely handle block compaction.
+    daily_gen_bytes = DPS * 86400 * 1.5
+    compactor_scratch_bytes = daily_gen_bytes * 28
     
-    series_in_thousands = max(10, active_series / 1000)
+    series_in_thousands = max(10, ACTIVE_TS / 1000)
     compactor_ram_gb = 2 + (math.log10(series_in_thousands) * 5)
     compactor_cpu = 2 + (math.log10(series_in_thousands) * 1.2)
     compactor_cpu = max(0.1, min(8.0, compactor_cpu))
@@ -322,8 +336,8 @@ async def calculate_pool(req: PoolRequest):
     )
 
     # --- Frontend ---
-    base_cpu_per_pod = 1 + (active_series / 1500000)
-    base_ram_gb_per_pod = 2 + (active_series / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5)
+    base_cpu_per_pod = 1 + (ACTIVE_TS / 1500000)
+    base_ram_gb_per_pod = 2 + (ACTIVE_TS / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5)
     
     frontend_replicas = max(1, math.ceil(qps / 25))
     
@@ -361,7 +375,8 @@ async def calculate_pool(req: PoolRequest):
         receiver_ingestor=ingestor_res,
         store=store_res,
         compactor=compactor_res,
-        s3=format_k8s_resource(total_s3_bytes)
+        s3=format_k8s_resource(total_s3_bytes),
+        dps=DPS
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

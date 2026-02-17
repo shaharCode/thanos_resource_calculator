@@ -46,6 +46,7 @@ class PoolResources(BaseModel):
     store: ResourcesWithStorage
     compactor: Optional[ResourcesWithStorage]
     s3: str = Field(..., description="S3 size in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
+    dps: int = Field(..., description="Number of data points per second, in ints", gt=0)
 
     class Config:
         json_schema_extra = {
@@ -83,7 +84,8 @@ class PoolResources(BaseModel):
                     "replicas": 1,
                     "storage": "200Gi"
                 },
-                "s3": "500Gi"
+                "s3": "500Gi",
+                "dps": 1667
             }
         }
 
@@ -99,27 +101,15 @@ class CollectorRequest(BaseModel):
 
 
 class PoolRequest(BaseModel):
-    activeSeries: int = Field(..., description="Number of active series", gt=0)
-    interval: int = Field(..., description="Scrape interval in seconds", gt=0)
-    qps: int = Field(..., description="Queries per second", gt=0)
-    perfFactor: float = Field(..., description="Performance factor (1.0-2.0)", ge=1.0, le=2.0)
-    queryComplexity: int = Field(..., description="Query complexity in bytes", gt=0)
-    retLocalHours: int = Field(..., description="Local retention in hours", gt=0)
-    retRawDays: int = Field(..., description="Raw retention in days", gt=0)
-    ret5mDays: int = Field(..., description="5m downsampling retention in days", gt=0)
-    ret1hDays: int = Field(..., description="1h downsampling retention in days", gt=0)
+    dps: float = Field(..., description="Data points per second", gt=0)
+    scrape_interval: int = Field(..., description="Scrape interval in seconds", gt=0)
+    retention: int = Field(..., description="Retention in days", gt=0)
 
     class Config:
         json_schema_extra = {
             "example": {
-                "activeSeries": 100000,
-                "interval": 60,
-                "qps": 15,
-                "perfFactor": 1.3,
-                "queryComplexity": 268435456,
-                "retLocalHours": 6,
-                "retRawDays": 14,
-                "ret5mDays": 90,
-                "ret1hDays": 365
+                "dps": 1667,
+                "scrape_interval": 60,
+                "retention": 14
             }
         }
