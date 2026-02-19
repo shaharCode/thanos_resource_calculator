@@ -348,21 +348,58 @@ async def calculate_pool(req: PoolRequest):
     )
 
     # --- Frontend ---
-    base_cpu_per_pod = 1 + (ACTIVE_TS / 1500000)
-    base_ram_gb_per_pod = 2 + (ACTIVE_TS / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5)
+    # --- Hot-window weighting ---
+    hot_weights = [
+        (1, 0.55),   # 1 day, 55% of queries
+        (2, 0.25),  # next 2 days, 25%
+        (4, 0.15),   # next 4 days, 15%
+        (23, 0.05)  # remaining up to 30d, 5%
+    ]
+
+    # Adjust for actual retention
+    remaining_retention = min(RETENTION, 30)
+    weighted_days = 0.0
+    for days, weight in hot_weights:
+        if remaining_retention <= 0:
+            break
+        used_days = min(days, remaining_retention)
+        weighted_days += used_days * weight
+        remaining_retention -= used_days
+
+    # Weighted sample count
+    hot_samples = DPS * 86400 * weighted_days
+
+    # Logarithmic damping to avoid explosion
+    working_set_scale = math.log10(hot_samples)
+
+    # Aggressive caching factor
+    cache_aggressiveness = 2.0
+
+    # RAM per pod
+    frontend_replicas = max(1, math.ceil(DPS / 200000))
+    frontend_cpu_per_pod = 1.0 + (ACTIVE_TS / 5000000)
+
+    base_ram_gb_per_pod = 3 + working_set_scale * cache_aggressiveness
+    frontend_ram_per_pod = base_ram_gb_per_pod * 1024**3
+
+
+
+
+    # base_cpu_per_pod = 1 + (ACTIVE_TS / 1500000)
+    # base_ram_gb_per_pod = 2 + (ACTIVE_TS / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5)
     
-    frontend_replicas = max(1, math.ceil(qps / 25))
+    # frontend_replicas = max(1, math.ceil(qps / 25))
     
-    frontend_cpu_per_pod = base_cpu_per_pod * perf_factor
-    frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor
+    # frontend_cpu_per_pod = base_cpu_per_pod * perf_factor
+    # frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor   
     
-    frontend_res = create_resources(
-        frontend_cpu_per_pod, 
-        frontend_ram_per_pod, 
-        frontend_replicas,
-        cpu_limit_multiplier=1.1,
-        memory_limit_multiplier=1.2
-    )
+    # frontend_res = create_resources(
+    #     frontend_cpu_per_pod, 
+    #     frontend_ram_per_pod, 
+    #     frontend_replicas,
+    #     cpu_limit_multiplier=1.1,
+    #     memory_limit_multiplier=1.2
+    # )
 
     # --- Querier ---
     querier_replicas = 1 + math.floor(qps / 20)
