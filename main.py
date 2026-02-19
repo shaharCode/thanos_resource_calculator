@@ -66,21 +66,21 @@ def calculate_limit_multiplier(base_multiplier: float, resource_value: float,
     if resource_type == "cpu":
         if resource_value < 0.5:
             min_buffer = 0.3
-            percentage_buffer = resource_value * (base_multiplier - 1.0)
+            percentage_buffer = resource_value * (base_multiplier - 1)
             actual_buffer = max(percentage_buffer, min_buffer)
-            return 1.0 + (actual_buffer / resource_value)
+            return 1 + (actual_buffer / resource_value)
     
     elif resource_type == "memory":
         memory_gb = resource_value / (1024 ** 3)
         
         if memory_gb < 2:
             min_buffer_bytes = 1 * 1024 ** 3
-            percentage_buffer = resource_value * (base_multiplier - 1.0)
+            percentage_buffer = resource_value * (base_multiplier - 1)
             actual_buffer = max(percentage_buffer, min_buffer_bytes)
-            return 1.0 + (actual_buffer / resource_value)
+            return 1 + (actual_buffer / resource_value)
         
         elif memory_gb > 100:
-            reduced_multiplier = 1.0 + ((base_multiplier - 1.0) * 0.7)
+            reduced_multiplier = 1 + ((base_multiplier - 1) * 0.7)
             return reduced_multiplier
     
     return base_multiplier
@@ -167,8 +167,8 @@ async def calculate_collector(req: CollectorRequest):
     # OTel Logic
     # Estimate OTel Collector resources from DPS using linear scaling:
     # ~1 CPU per 25k samples/sec and ~1 GiB RAM per 5k samples/sec, plus a 512 MiB base footprint.
-    otel_cpu = (dps / 25000.0)
-    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 5000.0) * 1024 * 1024 * 1024)
+    otel_cpu = (dps / 25000)
+    otel_ram_bytes = (512 * 1024 * 1024) + ((dps / 5000) * 1024 * 1024 * 1024)
     
     otel_resources = create_resources(
         otel_cpu, 
@@ -235,7 +235,7 @@ async def calculate_pool(req: PoolRequest):
     BYTES_PER_SERIES = 12 * 1024
     HEAD_HOURS = 2
     RETENTION_HOURS = 6
-    CPU_PER_DPS_INGEST = 1 / 12000.0
+    CPU_PER_DPS_INGEST = 1 / 12000
     MAX_SERIES_PER_REPLICA = 4000000
     MIN_PVC_BYTES = 5 * 1024**3
     
@@ -269,10 +269,10 @@ async def calculate_pool(req: PoolRequest):
     # (≈15% max gain by 2M series) due to better TSDB compression and index amortization.
 
     if ACTIVE_TS < 200000:
-        scale_multiplier = 1.0
+        scale_multiplier = 1
     else: 
         # Linearly scale efficiency from 200k → 2M active series
-        scale_factor = min(1.0, (ACTIVE_TS - 200000) / 1800000)
+        scale_factor = min(1, (ACTIVE_TS - 200000) / 1800000)
         # Empirically derived storage efficiency scaling (from test environments)
         scale_multiplier = 0.599 - (scale_factor * 0.0806)
 
@@ -300,7 +300,7 @@ async def calculate_pool(req: PoolRequest):
     series_in_thousands = max(10, ACTIVE_TS / 1000)
     compactor_ram_gb = 2 + (math.log10(series_in_thousands) * 5)
     compactor_cpu = 2 + (math.log10(series_in_thousands) * 1.2)
-    compactor_cpu = max(0.1, min(8.0, compactor_cpu))
+    compactor_cpu = max(0.1, min(8, compactor_cpu))
     compactor_ram_bytes = compactor_ram_gb * 1024 * 1024 * 1024
     
     compactor_res = create_resources_with_storage(
@@ -312,25 +312,37 @@ async def calculate_pool(req: PoolRequest):
         memory_limit_multiplier=1.5
     )
 
-    # --- Store ---
-    store_cache_bytes = (total_s3_bytes * 0.002) + (2 * 1024 * 1024 * 1024)
-    store_query_overhead = qps * complexity_bytes
-    store_ram_total = store_cache_bytes + store_query_overhead
-    
-    base_store_cpu = (active_series / 1500000) + (qps / 15)
-    store_cpu = base_store_cpu * perf_factor
-    store_cpu = max(0.1, store_cpu)
-    
-    store_replicas = 1
-    
-    store_ram_per_pod = store_ram_total / store_replicas
-    store_pvc_per_replica = total_s3_bytes * 0.10
+    # --- Store Gateway Sizing (Cardinality-Driven Model) ---
+    # RAM = 2GB baseline + per-series index metadata (smoothly scaled 2KB → 1.4KB 
+    # small clusters -> large clusters) + 30% headroom for query working memory.
+    # CPU ≈ 1 core per 1M active series (min 0.1).
+    # PVC scales smoothly from 10% (small clusters) to 5% (≥10M series).
+
+    base_bytes_per_series = 2000
+    min_bytes_per_series = 1400    
+
+    series_scale = min(1.0, ACTIVE_TS / 5000000)
+    bytes_per_series = base_bytes_per_series - (
+        series_scale * (base_bytes_per_series - min_bytes_per_series)
+    )
+
+    # --- Memory ---
+    index_cache_bytes = ACTIVE_TS * bytes_per_series
+    baseline_bytes = 2 * 1024**3
+    store_ram = (baseline_bytes + index_cache_bytes) * 1.3
+
+    # --- CPU ---
+    store_cpu = max(0.1, ACTIVE_TS / 1000000)
+
+    # --- PVC ---
+    pvc_ratio = 0.10 - min(0.05, ACTIVE_TS / 10000000 * 0.05)
+    store_pvc = total_s3_bytes * pvc_ratio
     
     store_res = create_resources_with_storage(
         store_cpu, 
-        store_ram_per_pod, 
-        store_replicas, 
-        store_pvc_per_replica,
+        store_ram, 
+        1, 
+        store_pvc,
         cpu_limit_multiplier=1.2,
         memory_limit_multiplier=1.35
     )
@@ -355,7 +367,7 @@ async def calculate_pool(req: PoolRequest):
     # --- Querier ---
     querier_replicas = 1 + math.floor(qps / 20)
     querier_cpu_total = (querier_replicas * 2.5) * perf_factor
-    querier_ram_bytes_total = ((active_series / 100000) * 1024 * 1024 * 1024) + (qps * complexity_bytes * perf_factor)
+    querier_ram_bytes_total = ((ACTIVE_TS / 100000) * 1024 * 1024 * 1024) + (qps * complexity_bytes * perf_factor)
     
     querier_ram_per_pod = querier_ram_bytes_total / querier_replicas
     querier_cpu_per_pod = querier_cpu_total / querier_replicas

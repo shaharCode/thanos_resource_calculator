@@ -20,15 +20,9 @@ def test_collector():
 def test_pool():
     print("\nTesting Pool Endpoint...")
     payload = {
-        "activeSeries": 100000,
-        "interval": 60,
-        "qps": 10,
-        "perfFactor": 1.3,
-        "queryComplexity": 50000000,
-        "retLocalHours": 6,
-        "retRawDays": 14,
-        "ret5mDays": 30,
-        "ret1hDays": 90
+        "dps": 1667,
+        "scrape_interval": 60,
+        "retention": 180
     }
     response = client.post("/api/calculate/pool_resources", json=payload)
     if response.status_code == 200:
