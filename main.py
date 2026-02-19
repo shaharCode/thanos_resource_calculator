@@ -329,10 +329,10 @@ async def calculate_pool(req: PoolRequest):
     # --- Memory ---
     index_cache_bytes = ACTIVE_TS * bytes_per_series
     baseline_bytes = 2 * 1024**3
-    store_ram = (baseline_bytes + index_cache_bytes) * 1.3
+    store_ram = (baseline_bytes + index_cache_bytes) * 1.4
 
     # --- CPU ---
-    store_cpu = max(0.1, ACTIVE_TS / 1000000)
+    store_cpu = max(0.1, ACTIVE_TS / 1500000)
 
     # --- PVC ---
     pvc_ratio = 0.10 - min(0.05, ACTIVE_TS / 10000000 * 0.05)
