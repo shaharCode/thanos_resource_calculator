@@ -369,49 +369,54 @@ async def calculate_pool(req: PoolRequest):
     # Weighted sample count
     hot_samples = DPS * 86400 * weighted_days
 
-    # Logarithmic damping to avoid explosion
-    working_set_scale = math.log10(hot_samples)
+    # Power function scaling — more expressive than log, stays sub-linear.
+    # Normalized against 1B samples (medium env baseline).
+    # Exponent 0.5 (sqrt): steeper growth than 0.35 — matches aggressive caching at high DPS.
+    working_set_scale = (hot_samples / 1e9) ** 0.5
 
-    # Aggressive caching factor
+    # Aggressive caching factor (production environments with result caching enabled)
     cache_aggressiveness = 2.0
 
     # RAM per pod
-    frontend_replicas = max(1, math.ceil(DPS / 200000))
-    frontend_cpu_per_pod = 1.0 + (ACTIVE_TS / 5000000)
+    frontend_replicas = max(1, math.ceil((DPS / 200000) ** 0.8))
+    frontend_cpu_per_pod = 1 + (working_set_scale / 3)
 
-    base_ram_gb_per_pod = 3 + working_set_scale * cache_aggressiveness
+    base_ram_gb_per_pod = 1.5 + working_set_scale * cache_aggressiveness
     frontend_ram_per_pod = base_ram_gb_per_pod * 1024**3
-
-
-
-
-    # base_cpu_per_pod = 1 + (ACTIVE_TS / 1500000)
-    # base_ram_gb_per_pod = 2 + (ACTIVE_TS / 100000) + (complexity_bytes / 1024 / 1024 / 1024 * 0.5)
     
-    # frontend_replicas = max(1, math.ceil(qps / 25))
-    
-    # frontend_cpu_per_pod = base_cpu_per_pod * perf_factor
-    # frontend_ram_per_pod = base_ram_gb_per_pod * 1024 * 1024 * 1024 * perf_factor   
-    
-    # frontend_res = create_resources(
-    #     frontend_cpu_per_pod, 
-    #     frontend_ram_per_pod, 
-    #     frontend_replicas,
-    #     cpu_limit_multiplier=1.1,
-    #     memory_limit_multiplier=1.2
-    # )
+    frontend_res = create_resources(
+        frontend_cpu_per_pod, 
+        frontend_ram_per_pod, 
+        frontend_replicas,
+        cpu_limit_multiplier=1.1,
+        memory_limit_multiplier=1.25
+    )
 
     # --- Querier ---
-    querier_replicas = 1 + math.floor(qps / 20)
-    querier_cpu_total = (querier_replicas * 2.5) * perf_factor
-    querier_ram_bytes_total = ((ACTIVE_TS / 100000) * 1024 * 1024 * 1024) + (qps * complexity_bytes * perf_factor)
-    
-    querier_ram_per_pod = querier_ram_bytes_total / querier_replicas
-    querier_cpu_per_pod = querier_cpu_total / querier_replicas
-    
+    # Reuse hot_samples & working_set_scale from frontend section
+    # Replica scaling: more sensitive than frontend
+    querier_replicas = max(
+        1,
+        math.ceil((working_set_scale / 2)),
+        math.ceil(ACTIVE_TS / 4_000_000)
+    )
+
+    # CPU: heavier than frontend (actual query execution)
+    querier_cpu_per_pod = 2 + (working_set_scale * 0.7)
+
+    # RAM: mainly chunk decoding + series expansion
+    # Scales with active cardinality and hot pressure
+    querier_ram_gb_per_pod = (
+        2
+        + (ACTIVE_TS / 2_000_000)
+        + (working_set_scale * 1.2)
+    )
+
+    querier_ram_per_pod = querier_ram_gb_per_pod * 1024**3
+
     querier_res = create_resources(
-        querier_cpu_per_pod, 
-        querier_ram_per_pod, 
+        querier_cpu_per_pod,
+        querier_ram_per_pod,
         querier_replicas,
         cpu_limit_multiplier=1.2,
         memory_limit_multiplier=1.4
