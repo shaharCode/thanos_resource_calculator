@@ -7,6 +7,7 @@ from models import (
     PoolRequest,
     CollectorResources,
     PoolResources,
+    DataRetention,
     Resources,
     ResourcesWithStorage,
     BasicResources
@@ -178,14 +179,12 @@ async def calculate_collector(req: CollectorRequest):
         memory_limit_multiplier=1.3
     )
     
-    # Add ephemeral storage to requests and limits
-    otel_resources.requests.ephemeralStorage = otel_resources.limits.ephemeralStorage = DEFAULT_EPHEMERAL_STORAGE 
-    
     return CollectorResources(
         requests=otel_resources.requests,
         limits=otel_resources.limits,
         replicas=1,
-        dps=math.ceil(dps)
+        dps=math.ceil(dps),
+        ephemeral_storage=DEFAULT_EPHEMERAL_STORAGE
     )
 
 
@@ -430,7 +429,12 @@ async def calculate_pool(req: PoolRequest):
         store=store_res,
         compactor=compactor_res,
         s3=format_k8s_resource(total_s3_bytes),
-        dps=DPS
+        dps=DPS,
+        data_retention=DataRetention(
+            raw_data=f"{RET_RAW_DAYS}d",
+            downsample_5m=f"{RET_5M_DAYS}d",
+            downsample_1h=f"{RET_1H_DAYS}d"
+        )
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

@@ -1,24 +1,32 @@
 from pydantic import BaseModel, Field
-from typing import Optional
 
 RESOURCE_PATTERN = "^[0-9]+[KMG]i$"
 CPU_PATTERN = "^([0-9]+)m?$"
+TIME_WINDOW_REGEX = "^[0-9]+[hmdy]$"
 
-class BasicResources(BaseModel):
-    memory: str = Field(..., description="Memory in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
-    cpu: str = Field(..., description="CPU in cores or millicores (e.g. '1', '500m')", pattern=CPU_PATTERN)
-    ephemeralStorage: Optional[str] = Field(default=None, description="Ephemeral storage in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
 
-class Resources(BaseModel):
+class BasicResources (BaseModel):
+    memory: str = Field(..., description="memory in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
+    cpu: str = Field(..., description="cpu in cores/millicores", pattern=CPU_PATTERN)
+
+class Resources (BaseModel):
     requests: BasicResources
     limits: BasicResources
-    replicas: int = Field(..., description="Number of replicas in ints", gt=0)
+    replicas: int = Field(..., description="number of replicas in ints", gt=0)
 
-class ResourcesWithStorage(Resources):
-    storage: str = Field(..., description="Storage of PVC in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
+class ResourcesWithStorage (Resources):
+    storage: str = Field(..., description="storage of PVC in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
 
-class CollectorResources(Resources):
-    dps: int = Field(..., description="Number of data points per second, in ints", gt=0)
+class DatapointsPerSecond(BaseModel):
+    dps: int = Field(..., description="data points per second, in ints", gt=0)
+
+class DataRetention (BaseModel):
+    raw_data: str = Field(..., description="time to store raw metrics", pattern=TIME_WINDOW_REGEX)
+    downsample_5m: str = Field(..., description="time to store 5m downsampling metrics", pattern=TIME_WINDOW_REGEX)
+    downsample_1h: str = Field(..., description="time to store 1h downsampling metrics", pattern=TIME_WINDOW_REGEX)
+
+class CollectorResources (Resources, DatapointsPerSecond):
+    ephemeral_storage: str = Field(description="ephemeral storage in Ki/Mi/Gi", pattern=RESOURCE_PATTERN, default=None)
 
     class Config:
         json_schema_extra = {
@@ -26,71 +34,109 @@ class CollectorResources(Resources):
                 "requests": {
                     "memory": "512Mi",
                     "cpu": "1",
-                    "ephemeralStorage": "512Mi"
                 },
                 "limits": {
                     "memory": "1Gi",
                     "cpu": "1",
-                    "ephemeralStorage": "1Gi"
                 },
                 "replicas": 1,
-                "dps": 5000
+                "dps": 5000,
+                "ephemeral_storage": "512Mi"
             }
         }
-
-class PoolResources(BaseModel):
-    receiver_router: Resources
+class PoolResources (BaseModel, DatapointsPerSecond):
     query: Resources
     query_frontend: Resources
+    receiver_router: Resources
     receiver_ingestor: ResourcesWithStorage
     store: ResourcesWithStorage
-    compactor: Optional[ResourcesWithStorage]
+    compactor: ResourcesWithStorage
     s3: str = Field(..., description="S3 size in Ki/Mi/Gi", pattern=RESOURCE_PATTERN)
-    dps: int = Field(..., description="Number of data points per second, in ints", gt=0)
+    data_retention: DataRetention
 
     class Config:
         json_schema_extra = {
             "example": {
-                "receiver_router": {
-                    "requests": {"memory": "1Gi", "cpu": "1"},
-                    "limits": {"memory": "2Gi", "cpu": "2"},
-                    "replicas": 2
-                },
                 "query": {
-                    "requests": {"memory": "1Gi", "cpu": "1"},
-                    "limits": {"memory": "2Gi", "cpu": "2"},
+                    "requests": {
+                        "memory": "1Gi",
+                        "cpu": "1",
+                    },
+                    "limits": {
+                        "memory": "2Gi",
+                        "cpu": "2",
+                    },
                     "replicas": 2
                 },
                 "query_frontend": {
-                    "requests": {"memory": "1Gi", "cpu": "1"},
-                    "limits": {"memory": "1Gi", "cpu": "1"},
+                    "requests": {
+                        "memory": "1Gi",
+                        "cpu": "1",
+                    },
+                    "limits": {
+                        "memory": "1Gi",
+                        "cpu": "1",
+                    },
+                    "replicas": 2
+                },
+                "receiver_router": {
+                    "requests": {
+                        "memory": "1Gi",
+                        "cpu": "1",
+                    },
+                    "limits": {
+                        "memory": "2Gi",
+                        "cpu": "2",
+                    },
                     "replicas": 2
                 },
                 "receiver_ingestor": {
-                    "requests": {"memory": "2Gi", "cpu": "2"},
-                    "limits": {"memory": "4Gi", "cpu": "4"},
-                    "replicas": 3,
+                    "requests": {
+                        "memory": "2Gi",
+                        "cpu": "2",
+                    },
+                    "limits": {
+                        "memory": "4Gi",
+                        "cpu": "4",
+                    },
+                    "replicas": 1,
                     "storage": "50Gi"
                 },
                 "store": {
-                    "requests": {"memory": "2Gi", "cpu": "1"},
-                    "limits": {"memory": "4Gi", "cpu": "2"},
+                    "requests": {
+                        "memory": "2Gi",
+                        "cpu": "1",
+                    },
+                    "limits": {
+                        "memory": "4Gi",
+                        "cpu": "2",
+                    },
                     "replicas": 1,
                     "storage": "100Gi"
                 },
                 "compactor": {
-                    "requests": {"memory": "4Gi", "cpu": "2"},
-                    "limits": {"memory": "8Gi", "cpu": "4"},
+                    "requests": {
+                        "memory": "4Gi",
+                        "cpu": "2",
+                    },
+                    "limits": {
+                        "memory": "8Gi",
+                        "cpu": "4",
+                    },
                     "replicas": 1,
                     "storage": "200Gi"
                 },
                 "s3": "500Gi",
-                "dps": 1667
+                "data_retention": {
+                    "raw_data": "30d",
+                    "downsample_5m": "90d",
+                    "downsample_1h": "150d"
+                }
             }
         }
 
 class CollectorRequest(BaseModel):
-    dps: float = Field(..., description="Data points per second", gt=0)
+    dps: int = Field(..., description="Data points per second", gt=0)
 
     class Config:
         json_schema_extra = {
@@ -101,7 +147,7 @@ class CollectorRequest(BaseModel):
 
 
 class PoolRequest(BaseModel):
-    dps: float = Field(..., description="Data points per second", gt=0)
+    dps: int = Field(..., description="Data points per second", gt=0)
     scrape_interval: int = Field(..., description="Scrape interval in seconds", gt=0)
     retention: int = Field(..., description="Retention in days", gt=0)
 
