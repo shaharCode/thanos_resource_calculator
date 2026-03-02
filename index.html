@@ -31,63 +31,26 @@
             <div id="estimatorInputs" style="display:none;"></div>
 
             <div class="input-group">
-                <label for="activeSeries">Active Series</label>
-                <input type="number" id="activeSeries" value="1000000" min="0" step="1000">
-                <div class="helper-text" id="seriesHelpText">Unique Time Series (Pre-replication)</div>
+                <label for="dps">Data Points Per Second (DPS)</label>
+                <input type="number" id="dps" value="16667" min="1" max="1000000" step="100">
+                <div class="helper-text" id="seriesHelpText">Ingestion rate (e.g. 1M series / 60s = 16,667 DPS)</div>
+                <div class="warning-text" id="dpsWarning"
+                    style="color: #f59e0b; font-size: 0.8rem; display: none; margin-top: 4px;"></div>
             </div>
 
             <div class="input-group">
                 <label for="interval">Scrape Interval (Sec)</label>
-                <input type="number" id="interval" value="60" min="1">
+                <input type="number" id="interval" value="60" min="1" max="300">
+                <div class="warning-text" id="intervalWarning"
+                    style="color: #f59e0b; font-size: 0.8rem; display: none; margin-top: 4px;"></div>
             </div>
 
             <div class="input-group">
-                <label for="qps">Query Load (QPS)</label>
-                <input type="number" id="qps" value="10" min="0" step="1">
-                <div class="helper-text">Average Queries Per Second</div>
-            </div>
-
-            <!-- Query Complexity Selector -->
-            <div class="input-group">
-                <label for="queryComplexity">Query Complexity</label>
-                <select id="queryComplexity">
-                    <option value="52428800">Light (Instant Queries) - 50MB</option>
-                    <option value="268435456" selected>Medium (1h Range) - 250MB</option>
-                    <option value="1610612736">Heavy (1d-3d Range) - 1.5GB</option>
-                    <option value="3221225472">Extreme (30d+ / High Card) - 3GB</option>
-                </select>
-                <div class="helper-text">Impacts Querier & Store RAM significantly.</div>
-            </div>
-
-            <!-- NEW: Performance/QoS Toggle -->
-            <div class="input-group">
-                <label for="perfMode">Performance Goal (SLO)</label>
-                <select id="perfMode" onchange="calculate()">
-                    <option value="1.0">Cost Optimized (High Utilization ~80%)</option>
-                    <option value="1.3" selected>Balanced (Standard Prod ~60%)</option>
-                    <option value="2.0">Low Latency (High Performance ~30%)</option>
-                </select>
-                <div class="helper-text">Affects CPU overprovisioning ratio.</div>
-            </div>
-
-            <div class="retention-grid">
-                <span class="retention-title">Retention Policies</span>
-                <div>
-                    <label style="font-size:0.8rem">Receiver (Hours)</label>
-                    <input type="number" id="retLocalHours" value="6" min="2" style="padding:8px; font-size:0.9rem">
-                </div>
-                <div>
-                    <label style="font-size:0.8rem">Raw (Days)</label>
-                    <input type="number" id="retRawDays" value="14" min="1" style="padding:8px; font-size:0.9rem">
-                </div>
-                <div>
-                    <label style="font-size:0.8rem">5m (Days)</label>
-                    <input type="number" id="ret5mDays" value="90" min="0" style="padding:8px; font-size:0.9rem">
-                </div>
-                <div>
-                    <label style="font-size:0.8rem">1h (Days)</label>
-                    <input type="number" id="ret1hDays" value="365" min="0" style="padding:8px; font-size:0.9rem">
-                </div>
+                <label for="retention">Total Retention (Days)</label>
+                <input type="number" id="retention" value="365" min="1" max="730">
+                <div class="helper-text">Raw data capped at 30d · 5m &amp; 1h downsampling derived automatically</div>
+                <div class="warning-text" id="retentionWarning"
+                    style="color: #f59e0b; font-size: 0.8rem; display: none; margin-top: 4px;"></div>
             </div>
         </div>
 
@@ -122,8 +85,8 @@
             </div>
 
             <div class="dps-card">
-                <span class="dps-value" id="dpsResult">0</span>
-                <span class="dps-label">Data Points Per Second (DPS)</span>
+                <span class="dps-value" id="activeTSResult">0</span>
+                <span class="dps-label">Active Time Series</span>
             </div>
 
             <div class="grid-results">

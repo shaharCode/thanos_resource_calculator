@@ -44,7 +44,7 @@ class CollectorResources (Resources, DatapointsPerSecond):
                 "ephemeral_storage": "512Mi"
             }
         }
-class PoolResources (BaseModel, DatapointsPerSecond):
+class PoolResources (DatapointsPerSecond):
     query: Resources
     query_frontend: Resources
     receiver_router: Resources
@@ -136,7 +136,7 @@ class PoolResources (BaseModel, DatapointsPerSecond):
         }
 
 class CollectorRequest(BaseModel):
-    dps: int = Field(..., description="Data points per second", gt=0)
+    dps: int = Field(..., description="Data points per second", gt=0, le=10_000_000)
 
     class Config:
         json_schema_extra = {
@@ -147,9 +147,9 @@ class CollectorRequest(BaseModel):
 
 
 class PoolRequest(BaseModel):
-    dps: int = Field(..., description="Data points per second", gt=0)
-    scrape_interval: int = Field(..., description="Scrape interval in seconds", gt=0)
-    retention: int = Field(..., description="Retention in days", gt=0)
+    dps: int = Field(..., description="Data points per second", gt=0, le=10_000_000)
+    scrape_interval: int = Field(..., description="Scrape interval in seconds", gt=0, le=300)
+    retention: int = Field(..., description="Retention in days", gt=0, le=3650)
 
     class Config:
         json_schema_extra = {

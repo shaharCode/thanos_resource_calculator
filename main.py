@@ -199,7 +199,7 @@ async def calculate_pool(req: PoolRequest):
     ACTIVE_TS = DPS * SCRAPE_INTERVAL
     RETENTION = req.retention
     RET_RAW_DAYS = min(30, RETENTION)
-    RET_5M_DAYS = RET_RAW_DAYS + max(0, (RETENTION - RET_RAW_DAYS)/2)
+    RET_5M_DAYS = RET_RAW_DAYS + max(0, math.ceil((RETENTION - RET_RAW_DAYS)/2))
     RET_1H_DAYS = RETENTION
     
     # --- Router ---
@@ -208,14 +208,12 @@ async def calculate_pool(req: PoolRequest):
     ROUTER_CPU_PER_DPS = 1 / 25000
     ROUTER_MEMORY_PER_POD = 2 * 1024 * 1024 * 1024
     ROUTER_MIN_REPLICAS = 2
+    MAX_CPU_PER_POD = 4
 
     total_cpu = DPS * ROUTER_CPU_PER_DPS
 
-    replicas = math.ceil(total_cpu)
-
-    if replicas < ROUTER_MIN_REPLICAS:
-        replicas = ROUTER_MIN_REPLICAS
-
+    replicas = math.ceil(total_cpu / MAX_CPU_PER_POD)
+    replicas = max(replicas, ROUTER_MIN_REPLICAS)
     cpu_per_pod = total_cpu / replicas
 
     router_res = create_resources(

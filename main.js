@@ -68,24 +68,18 @@ function setMode(mode) {
 
 async function calculate() {
     try {
-        const activeSeries = parseInt(document.getElementById('activeSeries').value) || 0;
-        const interval = parseInt(document.getElementById('interval').value) || 60;
-        const dps = activeSeries / interval;
+        const dps = Math.min(1000000, Math.max(1, parseInt(document.getElementById('dps').value) || 0));
+        const interval = Math.min(300, Math.max(1, parseInt(document.getElementById('interval').value) || 60));
+        const retention = Math.min(730, Math.max(1, parseInt(document.getElementById('retention').value) || 30));
 
         const payloadCollector = {
             dps: dps
         };
 
         const payloadPool = {
-            activeSeries: activeSeries,
-            interval: interval,
-            qps: parseInt(document.getElementById('qps').value) || 0,
-            perfFactor: parseFloat(document.getElementById('perfMode').value) || 1.3,
-            queryComplexity: parseInt(document.getElementById('queryComplexity').value) || 268435456,
-            retLocalHours: parseInt(document.getElementById('retLocalHours').value) || 6,
-            retRawDays: parseInt(document.getElementById('retRawDays').value) || 15,
-            ret5mDays: parseInt(document.getElementById('ret5mDays').value) || 0,
-            ret1hDays: parseInt(document.getElementById('ret1hDays').value) || 0
+            dps: dps,
+            scrape_interval: interval,
+            retention: retention
         };
 
         const [resCollector, resPool] = await Promise.all([
@@ -168,8 +162,9 @@ async function calculate() {
             return val * multiplier;
         }
 
-        // Display DPS
-        document.getElementById('dpsResult').innerText = formatNumber(r.dps);
+        // Display Active TS
+        const activeTS = r.dps * interval;
+        document.getElementById('activeTSResult').innerText = formatNumber(activeTS);
 
         // Calculate totals
         const totalPods = r.otel.replicas + r.router.replicas + r.ingestor.replicas + r.compactor.replicas + r.store.replicas + r.frontend.replicas + r.querier.replicas;
@@ -284,3 +279,32 @@ window.calculate = calculate;
 copyToClipboard = copyToClipboard;
 window.calculate = calculate;
 
+document.addEventListener('DOMContentLoaded', () => {
+    [
+        { id: 'dps', warn: 'dpsWarning' },
+        { id: 'interval', warn: 'intervalWarning' },
+        { id: 'retention', warn: 'retentionWarning' }
+    ].forEach(({ id, warn }) => {
+        const el = document.getElementById(id);
+        const warnEl = document.getElementById(warn);
+
+        el.addEventListener('change', () => {
+            const min = parseInt(el.min);
+            const max = parseInt(el.max);
+            const raw = parseInt(el.value) || 0;
+
+            if (raw < min) {
+                warnEl.textContent = `Value increased to minimum (${min}).`;
+                warnEl.style.display = 'block';
+                el.value = min;
+            } else if (raw > max) {
+                warnEl.textContent = `Value reduced to maximum (${max}).`;
+                warnEl.style.display = 'block';
+                el.value = max;
+            } else {
+                warnEl.textContent = '';
+                warnEl.style.display = 'none';
+            }
+        });
+    });
+});
