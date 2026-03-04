@@ -31,7 +31,7 @@
             <div id="estimatorInputs" style="display:none;"></div>
 
             <div class="input-group">
-                <label for="dps">Data Points Per Second (DPS)</label>
+                <label for="dps">Metrics Per Second (MPS/DPS)</label>
                 <input type="number" id="dps" value="16667" min="1" max="1000000" step="100">
                 <div class="helper-text" id="seriesHelpText">Ingestion rate (e.g. 1M series / 60s = 16,667 DPS)</div>
                 <div class="warning-text" id="dpsWarning"
@@ -47,7 +47,7 @@
 
             <div class="input-group">
                 <label for="retention">Total Retention (Days)</label>
-                <input type="number" id="retention" value="365" min="1" max="730">
+                <input type="number" id="retention" value="180" min="1" max="730">
                 <div class="helper-text">Raw data capped at 30d · 5m &amp; 1h downsampling derived automatically</div>
                 <div class="warning-text" id="retentionWarning"
                     style="color: #f59e0b; font-size: 0.8rem; display: none; margin-top: 4px;"></div>
@@ -246,17 +246,14 @@
                     <div class="metric-row">
                         <div class="card-value" id="querierReplicas">1 Replicas</div>
                         <div class="card-detail">Stateless Engine</div>
-                        <span class="formula-text">Form: Base 1 + (QPS / 20)</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="querierCpuVal">2</div>
                         <div class="card-detail">CPU (Per Replica)</div>
-                        <span class="formula-text">Form: (Replicas * 2 Core) * Perf</span>
                     </div>
                     <div class="metric-row">
                         <div class="card-value" id="querierRamVal">4 GB</div>
                         <div class="card-detail">RAM (Per Replica)</div>
-                        <span class="formula-text">Form: Replicas * Complexity</span>
                     </div>
                 </div>
 

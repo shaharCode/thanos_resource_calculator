@@ -369,13 +369,17 @@ async def calculate_pool(req: PoolRequest):
     # Power function scaling — more expressive than log, stays sub-linear.
     # Normalized against 1B samples (medium env baseline).
     # Exponent 0.5 (sqrt): steeper growth than 0.35 — matches aggressive caching at high DPS.
-    working_set_scale = (hot_samples / 1e9) ** 0.5
+    # Added query intensity factor of 1.3x
+    working_set_scale = 1.3 * (hot_samples / 1e9) ** 0.5
 
     # Aggressive caching factor (production environments with result caching enabled)
     cache_aggressiveness = 2.0
 
     # RAM per pod
-    frontend_replicas = max(1, math.ceil((DPS / 200000) ** 0.8))
+    frontend_replicas = max(
+        1,
+        math.ceil(working_set_scale / 3)
+    )
     frontend_cpu_per_pod = 1 + (working_set_scale / 3)
 
     base_ram_gb_per_pod = 1.5 + working_set_scale * cache_aggressiveness
@@ -386,7 +390,7 @@ async def calculate_pool(req: PoolRequest):
         frontend_ram_per_pod, 
         frontend_replicas,
         cpu_limit_multiplier=1.1,
-        memory_limit_multiplier=1.25
+        memory_limit_multiplier=1.4
     )
 
     # --- Querier ---
@@ -395,7 +399,7 @@ async def calculate_pool(req: PoolRequest):
     querier_replicas = max(
         1,
         math.ceil((working_set_scale / 2)),
-        math.ceil(ACTIVE_TS / 4_000_000)
+        math.ceil(ACTIVE_TS / 4000000)
     )
 
     # CPU: heavier than frontend (actual query execution)
@@ -405,8 +409,8 @@ async def calculate_pool(req: PoolRequest):
     # Scales with active cardinality and hot pressure
     querier_ram_gb_per_pod = (
         2
-        + (ACTIVE_TS / 2_000_000)
-        + (working_set_scale * 1.2)
+        + (ACTIVE_TS / 2000000)
+        + (working_set_scale * 1.5)
     )
 
     querier_ram_per_pod = querier_ram_gb_per_pod * 1024**3
@@ -416,7 +420,7 @@ async def calculate_pool(req: PoolRequest):
         querier_ram_per_pod,
         querier_replicas,
         cpu_limit_multiplier=1.2,
-        memory_limit_multiplier=1.4
+        memory_limit_multiplier=1.45
     )
 
     return PoolResources(
