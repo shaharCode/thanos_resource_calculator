@@ -135,9 +135,7 @@ class PoolResources (DatapointsPerSecond):
             }
         }
 
-class CollectorRequest(BaseModel):
-    dps: int = Field(..., description="Data points per second", gt=0, le=10_000_000)
-
+class CollectorRequest(DatapointsPerSecond):
     class Config:
         json_schema_extra = {
             "example": {
@@ -146,8 +144,7 @@ class CollectorRequest(BaseModel):
         }
 
 
-class PoolRequest(BaseModel):
-    dps: int = Field(..., description="Data points per second", gt=0, le=10_000_000)
+class PoolRequest(DatapointsPerSecond):
     scrape_interval: int = Field(..., description="Scrape interval in seconds", gt=0, le=300)
     retention: int = Field(..., description="Retention in days", gt=0, le=3650)
 
